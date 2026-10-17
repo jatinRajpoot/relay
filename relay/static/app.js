@@ -27,6 +27,7 @@ let historyRequestId = 0;
 let analyticsDays = 30;
 let selectedContentId = null;
 let selectedAccountIds = new Set();
+let composerStep = "media";
 let publishing = false;
 let activePage = "overview";
 const providerConfigured = { instagram: true, youtube: true };
@@ -193,8 +194,8 @@ function renderOverview() {
     ? "Unlock to view your library"
     : contentItems.length ? "Photos and videos ready to use" : "Upload a photo or video to begin";
 
-  let readiness = "Locked";
-  let readinessDetail = "Unlock to get started";
+  let readiness = "Unlock to begin";
+  let readinessDetail = "See what's ready to share";
   if (authenticated && !accountList.length) {
     readiness = "Set up channels";
     readinessDetail = "Connect Instagram or YouTube";
@@ -477,11 +478,11 @@ function setPage(page, { recordHistory = true } = {}) {
     const selected = item.dataset.nav === page;
     if (item.classList.contains("nav-item")) item.classList.toggle("active", selected);
     if (item.matches("a")) {
-      if (selected && item.classList.contains("nav-item")) item.setAttribute("aria-current", "page");
+      if (selected && (item.classList.contains("nav-item") || item.classList.contains("nav-more-link"))) item.setAttribute("aria-current", "page");
       else item.removeAttribute("aria-current");
     }
   });
-  const pageLabels = { overview: "Overview", analytics: "Analytics", history: "Post history", connections: "Channels", content: "Media library", publish: "Create a post" };
+  const pageLabels = { overview: "Home", analytics: "Analytics", history: "Post history", connections: "Channels", content: "Media library", publish: "Create a post" };
   $("#breadcrumb-label").textContent = pageLabels[page];
   document.title = `${pageLabels[page]} · Relay`;
   if (window.location.hash !== `#${page}`) {
@@ -491,6 +492,10 @@ function setPage(page, { recordHistory = true } = {}) {
   window.scrollTo({ top: 0, behavior: "smooth" });
   if (page === "analytics") void loadAnalytics();
   if (page === "history") void loadPostHistory();
+  $("#nav-more-menu").hidden = true;
+  $("#nav-more").setAttribute("aria-expanded", "false");
+  const moreActive = page === "analytics" || page === "history";
+  $("#nav-more").classList.toggle("active", moreActive);
 }
 
 function profileInitials(name) {
@@ -538,28 +543,28 @@ function renderComposerMedia() {
   grid.replaceChildren();
   const emptyTitle = $("#composer-media-empty-title");
   const emptyCopy = $("#composer-media-empty-copy");
-  const emptyAction = empty.querySelector("button");
+  const emptyAction = $("#composer-media-action");
   if (!authenticated) {
     emptyTitle.textContent = "Unlock your workspace to see your media";
     emptyCopy.textContent = "Your saved photos and videos will show here as visual previews.";
-    emptyAction.textContent = "Open media library";
+    emptyAction.textContent = "Unlock workspace";
     empty.hidden = false;
     grid.hidden = true;
     return;
   }
   if (!contentStorageConfigured) {
     emptyTitle.textContent = "Media storage needs setup";
-    emptyCopy.textContent = "Configure content storage on the service before adding or publishing media.";
+    emptyCopy.textContent = "Media storage needs a one-time setup before uploads can be saved.";
     emptyAction.hidden = true;
     empty.hidden = false;
     grid.hidden = true;
     return;
   }
   emptyAction.hidden = false;
-  emptyAction.innerHTML = 'Open media library <svg class="icon"><use href="#i-arrow"/></svg>';
+  emptyAction.textContent = "View media library";
   if (!contentItems.length) {
-    emptyTitle.textContent = "Your library is ready for its first upload";
-    emptyCopy.textContent = "Add a photo or video, then choose it here by its preview.";
+    emptyTitle.textContent = "Your library is ready for a first upload";
+    emptyCopy.textContent = "Upload a photo or video above. It will appear here as a preview.";
     empty.hidden = false;
     grid.hidden = true;
     return;
@@ -617,13 +622,17 @@ function renderComposerMedia() {
 
 function selectComposerMedia(item) {
   if (publishing) return;
-  const blocked = accountList.filter((account) => selectedAccountIds.has(account.id) && !canUseMedia(item, account.provider));
-  if (blocked.length) {
-    const providers = [...new Set(blocked.map((account) => names[account.provider]))].join(" and ");
-    notice(`This ${mediaKind(item).toLowerCase()} can't be sent to your selected ${providers} profile${blocked.length === 1 ? "" : "s"}. Deselect those profiles first.`, true);
-    return;
+  if (selectedContentId === item.id) {
+    selectedContentId = null;
+  } else {
+    const blocked = accountList.filter((account) => selectedAccountIds.has(account.id) && !canUseMedia(item, account.provider));
+    blocked.forEach((account) => selectedAccountIds.delete(account.id));
+    selectedContentId = item.id;
+    if (blocked.length) {
+      const providers = [...new Set(blocked.map((account) => names[account.provider]))].join(" and ");
+      notice(`Media changed. ${providers} ${blocked.length === 1 ? "selection was" : "selections were"} removed because this ${mediaKind(item).toLowerCase()} can't be sent there.`);
+    }
   }
-  selectedContentId = selectedContentId === item.id ? null : item.id;
   renderComposer();
 }
 
@@ -642,7 +651,7 @@ function renderDestinationGroup(provider) {
     button.type = "button";
     button.className = "text-button destination-connect";
     button.textContent = authenticated ? `Connect ${names[provider]}` : "Unlock workspace";
-    button.addEventListener("click", () => authenticated ? setPage("connections") : showUnlock());
+    button.addEventListener("click", () => authenticated ? connect(provider) : showUnlock(provider));
     empty.append(text, button);
     container.append(empty);
     return;
@@ -707,7 +716,7 @@ function renderComposerDetails() {
   $("#details-empty").hidden = hasInstagram || hasYoutube;
   $("#publish-caption").disabled = publishing || !hasInstagram;
   $("#youtube-publish-title").disabled = publishing || !hasYoutube;
-  $("#youtube-publish-title").required = hasYoutube;
+  $("#youtube-publish-title").required = hasYoutube && composerStep === "details";
   $("#youtube-publish-description").disabled = publishing || !hasYoutube;
   $("#youtube-publish-privacy").disabled = publishing || !hasYoutube;
   $("#youtube-made-for-kids").disabled = publishing || !hasYoutube;
@@ -774,9 +783,85 @@ function renderComposer() {
   if (selectedContentId && !contentItems.some((item) => item.id === selectedContentId)) selectedContentId = null;
   renderComposerMedia();
   renderComposerDestinations();
+  renderComposerWorkflow();
   renderComposerDetails();
   renderComposerPreview();
   syncPublishButtons();
+}
+
+function composerMediaIsReady() {
+  return authenticated && contentStorageConfigured && contentItems.some((item) => item.id === selectedContentId);
+}
+
+function composerChannelsAreReady() {
+  const item = contentItems.find((content) => content.id === selectedContentId);
+  const selected = accountList.filter((account) => selectedAccountIds.has(account.id));
+  return composerMediaIsReady() && selected.length > 0 && selected.every((account) =>
+    canUseMedia(item, account.provider) && (account.provider === "instagram" ? instagramMediaConfigured : contentStorageConfigured));
+}
+
+function renderComposerWorkflow() {
+  const mediaReady = composerMediaIsReady();
+  const channelsReady = composerChannelsAreReady();
+  if (composerStep === "details" && !channelsReady && !activeInstagramPosts.length && !youtubeUploadResults.length) {
+    composerStep = mediaReady ? "channels" : "media";
+  }
+  const workspace = $("#composer-workspace");
+  workspace.dataset.activeStep = composerStep;
+  document.querySelectorAll("[data-composer-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.composerPanel !== composerStep;
+  });
+  document.querySelectorAll("[data-compose-nav]").forEach((step) => {
+    const current = step.dataset.composeNav === composerStep;
+    const complete = step.dataset.composeNav === "media" ? mediaReady
+      : step.dataset.composeNav === "channels" ? channelsReady : false;
+    step.classList.toggle("active", current);
+    step.classList.toggle("complete", complete && !current);
+    if (current) step.setAttribute("aria-current", "step");
+    else step.removeAttribute("aria-current");
+  });
+  $("#composer-nav-channels").disabled = !mediaReady || publishing;
+  $("#composer-nav-details").disabled = !channelsReady || publishing;
+  document.querySelector('[data-compose-nav="media"]').disabled = publishing;
+  $("#back-to-media").disabled = publishing;
+  $("#back-to-channels").disabled = publishing;
+  $("#continue-to-channels").disabled = !mediaReady || publishing;
+  $("#continue-to-details").disabled = !channelsReady || publishing;
+  $("#publish-dock").hidden = composerStep !== "details";
+
+  const selected = accountList.filter((account) => selectedAccountIds.has(account.id));
+  const item = contentItems.find((content) => content.id === selectedContentId);
+  $("#composer-media-hint").textContent = item
+    ? `${mediaKind(item)} selected. Next, choose where it will go.`
+    : !authenticated ? "Unlock your workspace to choose saved media."
+      : !contentStorageConfigured ? "Media storage needs setup before you can continue."
+        : "Choose one item to continue.";
+  $("#composer-channel-hint").textContent = selected.length
+    ? `${selected.length} ${selected.length === 1 ? "channel" : "channels"} selected.`
+    : "Choose at least one account to continue.";
+  $("#composer-details-hint").textContent = selected.some((account) => account.provider === "instagram")
+    ? "Instagram will process the media first. It will not go live yet."
+    : "Review the visibility before you upload to YouTube.";
+}
+
+function setComposerStep(step) {
+  const order = { media: 1, channels: 2, details: 3 };
+  if (!order[step]) return;
+  if (step === "channels" && !composerMediaIsReady()) {
+    notice("Choose media before selecting channels.");
+    return;
+  }
+  if (step === "details" && !composerChannelsAreReady()) {
+    notice("Choose at least one compatible channel first.");
+    return;
+  }
+  composerStep = step;
+  renderComposerDetails();
+  renderComposerWorkflow();
+  syncPublishButtons();
+  const heading = document.querySelector(`[data-composer-panel="${step}"] h2`);
+  heading?.scrollIntoView({ behavior: "smooth", block: "start" });
+  heading?.focus({ preventScroll: true });
 }
 
 function syncPublishButtons() {
@@ -790,15 +875,17 @@ function syncPublishButtons() {
     (!hasInstagram || instagramMediaConfigured) && (!hasYoutube || item?.youtube_compatible) &&
     (!hasInstagram || item?.instagram_compatible) && (!hasYoutube || title.length > 0) && !publishing && !hasResults;
   $("#publish-submit").disabled = !ready;
-  const submitLabel = hasInstagram && !hasYoutube
-    ? "Send to Instagram" + (selected.length > 1 ? " · " + selected.length + " profiles" : "")
-    : hasYoutube && !hasInstagram
-      ? "Upload to YouTube" + (selected.length > 1 ? " · " + selected.length + " channels" : "")
-      : "Start for " + selected.length + " " + (selected.length === 1 ? "profile" : "profiles");
+  const submitLabel = hasInstagram && hasYoutube
+    ? `Send to ${selected.length} channels`
+    : hasInstagram
+      ? "Prepare Instagram post"
+      : "Upload to YouTube" + (selected.length > 1 ? ` · ${selected.length} channels` : "");
   $("#publish-submit").querySelector("span").textContent = submitLabel;
   $("#session-button").disabled = publishing;
   $("#content-file").disabled = !authenticated || !contentStorageConfigured || publishing;
   $("#content-upload-submit").disabled = !authenticated || !contentStorageConfigured || publishing;
+  $("#publish-file").disabled = !authenticated || !contentStorageConfigured || publishing;
+  $("#publish-upload-trigger").disabled = !authenticated || !contentStorageConfigured || publishing;
   const status = $("#composer-status");
   const statusTitle = $("#composer-status-title");
   if (publishing) {
@@ -1143,6 +1230,10 @@ async function connect(provider, popupAlreadyOpen = false) {
     $("#setup-dialog").showModal();
     return;
   }
+  if (!providerConfigured[provider]) {
+    notice(`${names[provider]} setup is incomplete. Open the setup guide to see what's missing.`, true);
+    return;
+  }
   if (!authenticated) { showUnlock(provider); return; }
   const buttons = document.querySelectorAll("[data-connect]");
   const button = document.querySelector(`[data-connect="${provider}"]`);
@@ -1179,6 +1270,74 @@ document.querySelectorAll("[data-nav]").forEach((item) => {
     setPage(item.dataset.nav);
   });
 });
+$("#nav-more").addEventListener("click", () => {
+  const menu = $("#nav-more-menu");
+  menu.hidden = !menu.hidden;
+  $("#nav-more").setAttribute("aria-expanded", String(!menu.hidden));
+});
+document.addEventListener("click", (event) => {
+  if (!(event.target instanceof Element) || event.target.closest("#nav-more, #nav-more-menu")) return;
+  $("#nav-more-menu").hidden = true;
+  $("#nav-more").setAttribute("aria-expanded", "false");
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || $("#nav-more-menu").hidden) return;
+  $("#nav-more-menu").hidden = true;
+  $("#nav-more").setAttribute("aria-expanded", "false");
+  $("#nav-more").focus();
+});
+document.querySelectorAll("[data-compose-nav]").forEach((step) => {
+  step.addEventListener("click", () => setComposerStep(step.dataset.composeNav));
+});
+$("#continue-to-channels").addEventListener("click", () => setComposerStep("channels"));
+$("#continue-to-details").addEventListener("click", () => setComposerStep("details"));
+$("#back-to-media").addEventListener("click", () => setComposerStep("media"));
+$("#back-to-channels").addEventListener("click", () => setComposerStep("channels"));
+$("#composer-media-action").addEventListener("click", () => {
+  if (!authenticated) { showUnlock(); return; }
+  setPage("content");
+});
+$("#publish-upload-trigger").addEventListener("click", () => {
+  if (!authenticated) { showUnlock(); return; }
+  if (!contentStorageConfigured) {
+    notice("Media storage needs setup before uploads can be saved.", true);
+    return;
+  }
+  $("#publish-file").click();
+});
+$("#publish-file").addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (!authenticated) { showUnlock(); return; }
+  if (!contentStorageConfigured) {
+    notice("Media storage needs setup before uploads can be saved.", true);
+    return;
+  }
+  const button = $("#publish-upload-trigger");
+  const status = $("#publish-upload-status");
+  $("#publish-upload-name").textContent = file.name;
+  status.hidden = false;
+  status.textContent = "Adding your file to the media library…";
+  button.disabled = true;
+  try {
+    const form = new FormData();
+    form.append("file", file);
+    const item = await api("/content", { method: "POST", body: form });
+    await loadContent();
+    selectedContentId = item.id;
+    composerStep = "media";
+    renderComposer();
+    status.textContent = "Added to your library. Continue to channels when you're ready.";
+    $("#publish-file").value = "";
+    $("#publish-upload-name").textContent = "No file selected";
+  } catch (error) {
+    status.textContent = error.message;
+    notice(error.message, true);
+  } finally {
+    button.disabled = false;
+    syncPublishButtons();
+  }
+});
 $("#refresh-history").addEventListener("click", () => {
   if (!authenticated) { showUnlock(); return; }
   void loadPostHistory();
@@ -1206,7 +1365,11 @@ $("#content-file").addEventListener("change", (event) => {
   $("#content-file-name").textContent = event.target.files[0]?.name || "No file selected";
 });
 document.querySelectorAll("[data-setup]").forEach((button) => {
-  button.addEventListener("click", () => $("#setup-dialog").showModal());
+  button.addEventListener("click", () => {
+    $("#nav-more-menu").hidden = true;
+    $("#nav-more").setAttribute("aria-expanded", "false");
+    $("#setup-dialog").showModal();
+  });
 });
 document.querySelectorAll("[data-close]").forEach((button) => {
   button.addEventListener("click", () => document.getElementById(button.dataset.close).close());
@@ -1551,6 +1714,7 @@ $("#publish-new-post").addEventListener("click", () => {
   instagramStatusTimer = null;
   selectedContentId = null;
   selectedAccountIds.clear();
+  composerStep = "media";
   activeInstagramPosts = [];
   youtubeUploadResults = [];
   $("#publish-caption").value = "";
@@ -1561,6 +1725,7 @@ $("#publish-new-post").addEventListener("click", () => {
   $("#youtube-made-for-kids").checked = false;
   renderPublishResults();
   renderComposer();
+  window.scrollTo({ top: 0, behavior: "smooth" });
 });
 
 function scheduleInstagramStatusCheck() {
