@@ -56,6 +56,15 @@ class Store:
                     status TEXT NOT NULL DEFAULT 'processing',
                     created_at INTEGER NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS content_items (
+                    id TEXT PRIMARY KEY,
+                    filename TEXT NOT NULL,
+                    content_type TEXT NOT NULL,
+                    size INTEGER NOT NULL,
+                    object_name TEXT NOT NULL UNIQUE,
+                    media_url TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
             """)
             columns = {row[1] for row in db.execute("PRAGMA table_info(oauth_states)")}
             if "return_to_ui" not in columns:
@@ -268,3 +277,28 @@ class Store:
                 ).rowcount
                 == 1
             )
+
+    def create_content_item(self, filename, content_type, size, object_name, media_url):
+        content_id = secrets.token_hex(16)
+        created_at = int(time.time())
+        with self.connection() as db:
+            db.execute(
+                """
+                INSERT INTO content_items(id, filename, content_type, size, object_name, media_url, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (content_id, filename, content_type, size, object_name, media_url, created_at),
+            )
+        return self.get_content_item(content_id)
+
+    def get_content_item(self, content_id):
+        with self.connection() as db:
+            row = db.execute("SELECT * FROM content_items WHERE id=?", (content_id,)).fetchone()
+        return dict(row) if row else None
+
+    def list_content_items(self):
+        with self.connection() as db:
+            return [
+                dict(row)
+                for row in db.execute("SELECT * FROM content_items ORDER BY created_at DESC, id DESC")
+            ]

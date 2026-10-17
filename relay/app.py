@@ -1,8 +1,10 @@
 import asyncio
+import mimetypes
 import secrets
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from tempfile import SpooledTemporaryFile
 from typing import Annotated, Literal
 from urllib.parse import quote, urlsplit
 
@@ -15,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from google.api_core.exceptions import GoogleAPIError
 from google.auth.exceptions import GoogleAuthError
 from pydantic import BaseModel, Field, HttpUrl, field_validator
+from starlette.datastructures import Headers
 
 from relay.config import Settings
 from relay.providers import Providers
@@ -200,6 +203,7 @@ def create_app(settings: Settings | None = None, transport=None):
             },
             "publishing": {
                 "instagram_media_configured": bool(settings.instagram_media_bucket),
+                "content_storage_configured": bool(settings.instagram_media_bucket),
                 "max_upload_bytes": settings.max_upload_bytes,
             },
         }
@@ -336,21 +340,25 @@ def create_app(settings: Settings | None = None, transport=None):
             raise HTTPException(404, "Connected account not found.")
         return Response(status_code=204)
 
-    @app.post("/instagram/media", dependencies=protected, tags=["Instagram"], status_code=201)
-    async def upload_instagram_media(file: Annotated[UploadFile, File()]):
-        """Upload JPEG or MP4 media to the configured public GCS bucket for Instagram to fetch."""
+    async def save_content_file(file: UploadFile):
         if not settings.instagram_media_bucket:
-            await file.close()
             raise HTTPException(503, "Instagram media storage is not configured on this service.")
         media_type = (file.content_type or "").lower()
-        extensions = {"image/jpeg": "jpg", "video/mp4": "mp4"}
-        if media_type not in extensions:
-            await file.close()
-            raise HTTPException(422, "Choose a JPEG image or an MP4 video for Instagram.")
+        if (
+            media_type != "image/jpeg"
+            and not media_type.startswith("video/")
+            and media_type != "application/octet-stream"
+        ):
+            raise HTTPException(422, "Choose a JPEG image or a video file.")
         if not file.size or file.size > settings.max_upload_bytes:
-            await file.close()
             raise HTTPException(413, "Media is empty or exceeds MAX_UPLOAD_BYTES.")
-        object_name = f"instagram/{secrets.token_urlsafe(24)}.{extensions[media_type]}"
+        extension = mimetypes.guess_extension(media_type) or ".bin"
+        if extension == ".jpe":
+            extension = ".jpg"
+        object_name = f"content/{secrets.token_urlsafe(24)}{extension}"
+        filename = (file.filename or "").replace("\\", "/").rsplit("/", 1)[-1].strip()
+        filename = "".join(character for character in filename if character.isprintable())[:255]
+        filename = filename or f"Untitled{extension}"
         try:
             from google.cloud import storage
 
@@ -364,15 +372,63 @@ def create_app(settings: Settings | None = None, transport=None):
             )
         except (GoogleAPIError, GoogleAuthError, OSError, ValueError):
             raise HTTPException(502, "Could not upload media to Google Cloud Storage.") from None
-        finally:
-            await file.close()
         media_url = (
             f"https://storage.googleapis.com/{quote(settings.instagram_media_bucket, safe='')}/"
             f"{quote(object_name, safe='/')}"
         )
+        try:
+            item = store.create_content_item(
+                filename, media_type, file.size, object_name, media_url
+            )
+        except Exception:
+            try:
+                blob.delete()
+            except Exception:
+                pass
+            raise HTTPException(
+                502, "Could not save the uploaded media to your content library."
+            ) from None
+        return item
+
+    def public_content_item(item):
         return {
-            "media_url": media_url,
-            "media_type": "IMAGE" if media_type == "image/jpeg" else "REELS",
+            "id": item["id"],
+            "filename": item["filename"],
+            "content_type": item["content_type"],
+            "size": item["size"],
+            "media_url": item["media_url"],
+            "created_at": item["created_at"],
+            "instagram_compatible": item["content_type"] in {"image/jpeg", "video/mp4"},
+            "youtube_compatible": item["content_type"].startswith("video/")
+            or item["content_type"] == "application/octet-stream",
+        }
+
+    @app.get("/content", dependencies=protected, tags=["Content"])
+    async def list_content():
+        return {"items": [public_content_item(item) for item in store.list_content_items()]}
+
+    @app.post("/content", dependencies=protected, tags=["Content"], status_code=201)
+    async def upload_content(file: Annotated[UploadFile, File()]):
+        """Save a JPEG or video file in the workspace media library."""
+        try:
+            item = await save_content_file(file)
+            return public_content_item(item)
+        finally:
+            await file.close()
+
+    @app.post("/instagram/media", dependencies=protected, tags=["Instagram"], status_code=201)
+    async def upload_instagram_media(file: Annotated[UploadFile, File()]):
+        """Upload JPEG or MP4 media to the configured public GCS bucket for Instagram to fetch."""
+        try:
+            if (file.content_type or "").lower() not in {"image/jpeg", "video/mp4"}:
+                raise HTTPException(422, "Choose a JPEG image or an MP4 video for Instagram.")
+            item = await save_content_file(file)
+        finally:
+            await file.close()
+        return {
+            "media_url": item["media_url"],
+            "media_type": "IMAGE" if item["content_type"] == "image/jpeg" else "REELS",
+            "content_id": item["id"],
         }
 
     @app.post("/instagram/posts", dependencies=protected, tags=["Instagram"], status_code=201)
@@ -421,16 +477,56 @@ def create_app(settings: Settings | None = None, transport=None):
     async def upload_video(
         account_id: Annotated[str, Form(min_length=1, max_length=64)],
         title: Annotated[str, Form(min_length=1, max_length=100)],
-        file: Annotated[UploadFile, File()],
+        file: Annotated[UploadFile | None, File()] = None,
+        content_id: Annotated[str | None, Form()] = None,
         description: Annotated[str, Form(max_length=5000)] = "",
         privacy_status: Annotated[Literal["private", "unlisted", "public"], Form()] = "private",
         category_id: Annotated[str, Form(pattern=r"^\d+$")] = "22",
         made_for_kids: Annotated[bool, Form()] = False,
     ):
         """Upload a video using YouTube's resumable session protocol. Defaults to private."""
+        if not title.strip() or "<" in title or ">" in title:
+            raise HTTPException(422, "Title must contain text and cannot include < or >.")
+        temporary_file = None
+        if content_id:
+            if file:
+                await file.close()
+                raise HTTPException(422, "Choose a saved content item or upload a file, not both.")
+            item = store.get_content_item(content_id)
+            if not item:
+                raise HTTPException(404, "Content item not found. Refresh your content library.")
+            if not (
+                item["content_type"].startswith("video/")
+                or item["content_type"] == "application/octet-stream"
+            ):
+                raise HTTPException(422, "Choose a video from your content library for YouTube.")
+            if not item["size"] or item["size"] > settings.max_upload_bytes:
+                raise HTTPException(413, "Video is empty or exceeds MAX_UPLOAD_BYTES.")
+            if not settings.instagram_media_bucket:
+                raise HTTPException(503, "Content storage is not configured on this service.")
+            try:
+                from google.cloud import storage
+
+                temporary_file = SpooledTemporaryFile(max_size=1024 * 1024, mode="w+b")
+                storage.Client().bucket(settings.instagram_media_bucket).blob(
+                    item["object_name"]
+                ).download_to_file(temporary_file)
+                temporary_file.seek(0)
+                file = UploadFile(
+                    filename=item["filename"],
+                    file=temporary_file,
+                    size=item["size"],
+                    headers=Headers({"content-type": item["content_type"]}),
+                )
+            except (GoogleAPIError, GoogleAuthError, OSError, ValueError):
+                if temporary_file is not None:
+                    temporary_file.close()
+                raise HTTPException(
+                    502, "Could not read the selected content from storage."
+                ) from None
+        if file is None:
+            raise HTTPException(422, "Choose a video from your content library.")
         try:
-            if not title.strip() or "<" in title or ">" in title:
-                raise HTTPException(422, "Title must contain text and cannot include < or >.")
             if not file.size or file.size > settings.max_upload_bytes:
                 raise HTTPException(413, "Video is empty or exceeds MAX_UPLOAD_BYTES.")
             mime = file.content_type or "application/octet-stream"

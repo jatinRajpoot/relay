@@ -87,7 +87,7 @@ Uploads default to a 2 GiB service limit (`MAX_UPLOAD_BYTES`). Files spool to te
 
 Meta fetches the media itself, so it needs a publicly accessible HTTPS URL (JPEG image, or MP4 video for Reels). The frontend can upload these files to a configured public-read Google Cloud Storage bucket and use its standard `https://storage.googleapis.com/...` URL. Configure `INSTAGRAM_MEDIA_BUCKET` and grant the service identity object creation access; the bucket needs public object viewer access so Meta can fetch the media. The API URL workflow below remains available for media hosted elsewhere.
 
-The frontend's **Publish to Instagram** form uploads media, creates the Instagram container, and lets you check readiness before publishing. The deployment limit is 20 MiB; local uploads use `MAX_UPLOAD_BYTES`.
+The frontend's **Content** section uploads JPEG photos and video files to the media library. In **Publish**, select a saved item for Instagram or YouTube. Instagram media needs a publicly accessible HTTPS URL, so the configured bucket must grant public object viewer access. YouTube videos are read from the same bucket and streamed into YouTube's resumable upload. The deployment limit is 20 MiB; local uploads use `MAX_UPLOAD_BYTES`.
 
 1. `POST /instagram/posts` creates an **unpublished** container and saves its job in SQLite:
 
@@ -116,7 +116,9 @@ The job atomically claims publication to prevent simultaneous requests from publ
 | GET | `/accounts` | List metadata, without tokens |
 | POST | `/accounts/{id}/refresh` | Refresh stored authorization |
 | DELETE | `/accounts/{id}` | Remove local connection |
-| POST | `/youtube/videos` | Multipart video upload |
+| GET | `/content` | List saved media library items |
+| POST | `/content` | Upload JPEG or video content to the media library |
+| POST | `/youtube/videos` | Multipart video upload or saved content selection |
 | POST | `/instagram/posts` | Create image/Reel container |
 | GET | `/instagram/posts/{id}` | Fetch and persist container status |
 | POST | `/instagram/posts/{id}/publish` | Publish ready container |
@@ -146,8 +148,8 @@ instances at one. Storage/API errors fail the request rather than silently losin
 Local runs continue to use local SQLite. Existing local connections are not migrated;
 connect accounts on the deployed site.
 
-The public `aitryout-485605-relay-media` bucket stores Instagram media uploaded from the
-frontend. Objects are readable by anyone with the URL so Meta can retrieve them. The
+The public `aitryout-485605-relay-media` bucket stores content uploaded from the
+frontend. Objects are readable by anyone with the URL so Meta can retrieve Instagram media. YouTube uploads read saved video files from this bucket. The
 `relay-run` service identity can create objects; the frontend receives standard HTTPS
 `storage.googleapis.com` URLs. Local runs use ADC from the configured gcloud account.
 

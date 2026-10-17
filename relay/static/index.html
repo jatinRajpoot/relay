@@ -24,6 +24,7 @@
     <symbol id="i-instagram" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01" stroke-width="3"/></symbol>
     <symbol id="i-youtube" viewBox="0 0 24 24"><path d="M21 7c-.3-1.4-1-2-2.4-2.2a56 56 0 0 0-13.2 0C4 5 3.3 5.6 3 7a28 28 0 0 0 0 10c.3 1.4 1 2 2.4 2.2a56 56 0 0 0 13.2 0C20 19 20.7 18.4 21 17a28 28 0 0 0 0-10Z"/><path d="m10 8 6 4-6 4Z" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 2 2.8 7.2L22 12l-7.2 2.8L12 22l-2.8-7.2L2 12l7.2-2.8L12 2Z"/></symbol>
+    <symbol id="i-media" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-5-5L5 20"/></symbol>
   </svg>
 
   <aside class="sidebar">
@@ -31,6 +32,7 @@
     <div class="workspace-label">YOUR WORKSPACE</div>
     <nav aria-label="Workspace navigation">
       <a class="nav-item active" href="#connections" data-nav="connections" aria-current="page"><svg class="icon"><use href="#i-link"/></svg>Connections<span class="nav-count" id="nav-count">—</span></a>
+      <a class="nav-item" href="#content" data-nav="content"><svg class="icon"><use href="#i-media"/></svg>Content<span class="nav-count" id="content-nav-count">0</span></a>
       <a class="nav-item" href="#publish" data-nav="publish"><svg class="icon"><use href="#i-spark"/></svg>Publish</a>
       <button class="nav-item" data-setup><svg class="icon"><use href="#i-book"/></svg>Setup guide<svg class="icon nav-chevron"><use href="#i-arrow"/></svg></button>
     </nav>
@@ -69,6 +71,27 @@
        </section>
       </section>
 
+      <section class="page-view" id="content-view" data-page-view="content" hidden>
+       <section class="page-heading">
+        <div><div class="eyebrow"><span></span>YOUR MEDIA LIBRARY</div><h1>Content</h1><p>Upload photos and videos once, then choose them when you publish. Stored media is publicly readable for Instagram.</p></div>
+       </section>
+       <div class="content-layout">
+        <section class="content-upload-card" aria-labelledby="content-upload-heading">
+         <div class="content-card-heading"><span class="content-upload-icon"><svg class="icon"><use href="#i-media"/></svg></span><div><h2 id="content-upload-heading">Upload content</h2><p>Add media to your workspace library.</p></div></div>
+         <form id="content-upload-form">
+          <div class="upload-field"><label for="content-file">Choose a file</label><label class="dropzone content-dropzone" for="content-file"><span class="upload-symbol">↑</span><strong>Choose a photo or video</strong><small>JPEG photos or video files</small><span class="file-name" id="content-file-name">No file selected</span></label><input id="content-file" type="file" accept="image/jpeg,video/*,application/octet-stream" required></div>
+          <div class="content-upload-footer"><small id="content-storage-hint">Files are stored in your workspace media library.</small><button class="button button-primary" id="content-upload-submit" type="submit"><span>Upload content</span><svg class="icon"><use href="#i-arrow"/></svg></button></div>
+          <p id="content-upload-status" role="status" class="content-upload-status"></p>
+         </form>
+        </section>
+        <section class="content-library" aria-labelledby="content-library-heading">
+         <div class="section-heading"><div><span class="eyebrow">READY TO PUBLISH</span><h2 id="content-library-heading">Your content <span class="count-pill" id="content-count">0</span></h2></div><button class="text-button" id="reload-content"><svg class="icon"><use href="#i-refresh"/></svg>Refresh</button></div>
+         <div id="content-empty" class="empty-state"><div class="empty-icon"><svg class="icon"><use href="#i-media"/></svg><span>+</span></div><h3 id="content-empty-title">Your media will appear here.</h3><p id="content-empty-description">Upload a photo or video to get started.</p><button class="button button-light" id="content-empty-action" type="button">Upload content</button></div>
+         <div id="content-list" class="content-grid" hidden></div>
+        </section>
+       </div>
+      </section>
+
       <section class="page-view" id="publish-view" data-page-view="publish" hidden>
        <section class="page-heading">
         <div><div class="eyebrow"><span></span>CREATE SOMETHING</div><h1>Publish</h1><p>Prepare your post, choose a connected channel, and send it live.</p></div>
@@ -84,7 +107,7 @@
           <form id="publish-form">
             <div class="publish-fields">
               <div><label for="publish-account">Instagram account</label><select id="publish-account" required disabled><option value="">Unlock and connect an Instagram account</option></select></div>
-              <div class="upload-field"><label for="publish-file">Add media</label><label class="dropzone" for="publish-file"><span class="upload-symbol">↑</span><strong>Choose a photo or video</strong><small>JPEG photo or MP4 Reel</small><span class="file-name" id="instagram-file-name">No file selected</span></label><input id="publish-file" type="file" accept="image/jpeg,video/mp4" required></div>
+              <div><label for="instagram-content">Choose from content</label><select id="instagram-content" required disabled><option value="">Upload media in Content first</option></select><small class="publish-content-hint"><button class="text-button" type="button" data-nav="content">Go to Content to upload media <svg class="icon"><use href="#i-arrow"/></svg></button></small></div>
               <div class="publish-caption"><label for="publish-caption">Caption</label><textarea id="publish-caption" maxlength="2200" rows="4" placeholder="Write a caption for your post…"></textarea><small class="field-hint"><span id="caption-count">0</span> / 2,200</small></div>
             </div>
             <div class="publish-actions"><p id="publish-status" role="status">Your media will be prepared for Instagram before publishing.</p><button class="button button-primary" id="publish-start" type="submit"><span>Prepare post</span><svg class="icon"><use href="#i-arrow"/></svg></button><button class="button button-light" id="publish-check" type="button" hidden>Check readiness</button><button class="button button-primary" id="publish-now" type="button" hidden>Publish now</button></div>
@@ -92,12 +115,12 @@
           <div class="composer-help" id="instagram-connect-help" hidden><svg class="icon"><use href="#i-link"/></svg><span><strong>Connect Instagram to continue</strong><small>You’ll choose your account here after connecting it.</small></span><button type="button" class="text-button" data-nav="connections">Go to connections <svg class="icon"><use href="#i-arrow"/></svg></button></div>
          </section>
          <section class="composer-panel" id="youtube-composer" role="tabpanel" aria-labelledby="tab-youtube" data-composer-panel="youtube" hidden>
-          <div class="composer-panel-heading"><div><span class="eyebrow">YOUTUBE</span><h2>Upload a video</h2></div><span class="composer-badge">Video</span></div>
+          <div class="composer-panel-heading"><div><span class="eyebrow">YOUTUBE</span><h2>Publish a video</h2></div><span class="composer-badge">Video</span></div>
           <form id="youtube-publish-form">
             <div class="publish-fields">
               <div><label for="youtube-publish-account">YouTube channel</label><select id="youtube-publish-account" required disabled><option value="">Unlock and connect a YouTube account</option></select></div>
               <div><label for="youtube-publish-title">Video title</label><input id="youtube-publish-title" type="text" maxlength="100" required placeholder="Give your video a title"></div>
-              <div class="upload-field"><label for="youtube-publish-file">Video file</label><label class="dropzone" for="youtube-publish-file"><span class="upload-symbol">↑</span><strong>Choose a video to upload</strong><small>Video uploads use the configured service limit</small><span class="file-name" id="youtube-file-name">No file selected</span></label><input id="youtube-publish-file" type="file" accept="video/*" required></div>
+              <div><label for="youtube-content">Choose a video from content</label><select id="youtube-content" required disabled><option value="">Upload a video in Content first</option></select><small class="publish-content-hint"><button class="text-button" type="button" data-nav="content">Go to Content to upload a video <svg class="icon"><use href="#i-arrow"/></svg></button></small></div>
               <div><label for="youtube-publish-privacy">Visibility</label><select id="youtube-publish-privacy"><option value="private">Private</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select></div>
               <div class="publish-caption"><label for="youtube-publish-description">Description</label><textarea id="youtube-publish-description" maxlength="5000" rows="3" placeholder="Add a description (optional)"></textarea></div>
             </div>
