@@ -13,6 +13,11 @@ let contentStorageConfigured = false;
 let maxUploadBytes = 0;
 let activeInstagramPosts = [];
 let youtubeUploadResults = [];
+let analyticsData = null;
+let analyticsLoading = false;
+let analyticsError = null;
+let analyticsRequestId = 0;
+let analyticsDays = 30;
 let selectedContentId = null;
 let selectedAccountIds = new Set();
 let publishing = false;
@@ -32,6 +37,7 @@ function resetConnectButtons() {
 const oauthPopup = new OAuthPopup(window, async ({provider, result}) => {
   resetConnectButtons();
   try { await loadAccounts(); } catch (error) { notice(error.message, true); return; }
+  if (activePage === "analytics") await loadAnalytics();
   if (result === "connected") notice(`${names[provider]} connected. Your account is ready.`);
   else {
     const messages = {
@@ -44,6 +50,7 @@ const oauthPopup = new OAuthPopup(window, async ({provider, result}) => {
 }, async () => {
   resetConnectButtons();
   try { await loadAccounts(); } catch (error) { notice(error.message, true); return; }
+  if (activePage === "analytics") await loadAnalytics();
   notice("Sign-in window closed. If the provider reported an invalid redirect URI, register the callback URL in the Setup guide. Otherwise, refresh the list after completing sign-in.");
 });
 
@@ -99,6 +106,10 @@ function renderSession() {
     selectedContentId = null;
     activeInstagramPosts = [];
     youtubeUploadResults = [];
+    analyticsData = null;
+    analyticsLoading = false;
+    analyticsError = null;
+    analyticsRequestId += 1;
     publishing = false;
     $("#accounts-list").replaceChildren();
     $("#accounts-list").hidden = true;
@@ -114,6 +125,7 @@ function renderSession() {
   renderContent();
   renderComposer();
   renderWorkspaceFlow();
+  renderAnalytics();
 }
 
 function renderWorkspaceFlow() {
@@ -264,8 +276,181 @@ function renderOverview() {
   }
 }
 
+function formattedMetric(value) {
+  return new Intl.NumberFormat().format(Number(value) || 0);
+}
+
+function renderAnalytics() {
+  const locked = $("#analytics-locked");
+  if (!locked) return;
+  locked.hidden = authenticated;
+  $("#analytics-loading").hidden = !authenticated || !analyticsLoading;
+  $("#analytics-error").hidden = !authenticated || !analyticsError;
+  $("#analytics-error").textContent = analyticsError || "";
+  const hasResult = Boolean(analyticsData);
+  const hasAccounts = Boolean(analyticsData?.accounts?.length);
+  $("#analytics-empty").hidden = !authenticated || analyticsLoading || Boolean(analyticsError) || !hasResult || hasAccounts;
+  const list = $("#analytics-list");
+  list.hidden = !authenticated || analyticsLoading || Boolean(analyticsError) || !hasAccounts;
+  list.replaceChildren();
+  if (!list.hidden) {
+    for (const account of analyticsData.accounts) list.append(makeAnalyticsCard(account, analyticsData.period));
+  }
+  $("#analytics-range").value = String(analyticsDays);
+}
+
+function makeAnalyticsCard(account, period) {
+  const card = document.createElement("article");
+  card.className = `analytics-account-card ${account.provider}`;
+  const heading = document.createElement("div");
+  heading.className = "analytics-account-heading";
+  const identity = document.createElement("div");
+  identity.className = "analytics-identity";
+  const icon = document.createElement("span");
+  icon.className = `channel-mini-icon ${account.provider}`;
+  const iconSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  iconSvg.classList.add("icon");
+  const iconUse = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  iconUse.setAttribute("href", `#i-${account.provider}`);
+  iconSvg.append(iconUse);
+  icon.append(iconSvg);
+  const title = document.createElement("span");
+  title.className = "analytics-account-title";
+  const name = document.createElement("strong");
+  name.textContent = account.name;
+  const subtitle = document.createElement("small");
+  subtitle.textContent = `${names[account.provider]} · ${period.start_date} – ${period.end_date}`;
+  title.append(name, subtitle);
+  identity.append(icon, title);
+  const badge = document.createElement("span");
+  badge.className = `analytics-platform-badge ${account.provider}`;
+  badge.textContent = names[account.provider];
+  heading.append(identity, badge);
+  card.append(heading);
+
+  if (account.status !== "ready") {
+    const unavailable = document.createElement("div");
+    unavailable.className = "analytics-unavailable";
+    const copy = document.createElement("p");
+    copy.textContent = account.message || "Analytics are unavailable for this channel.";
+    const action = document.createElement("button");
+    action.className = "text-button";
+    action.type = "button";
+    action.textContent = "Manage channels →";
+    action.addEventListener("click", () => setPage("connections"));
+    unavailable.append(copy, action);
+    card.append(unavailable);
+    return card;
+  }
+
+  const metrics = account.period || {};
+  const metricList = account.provider === "youtube"
+    ? [["Views", metrics.views], ["Likes", metrics.likes], ["Comments", metrics.comments], ["Subscribers gained", metrics.subscribers_gained]]
+    : [["Posts", metrics.posts], ["Likes", metrics.likes], ["Comments", metrics.comments], ["Avg. interactions", metrics.average_interactions]];
+  const metricGrid = document.createElement("div");
+  metricGrid.className = "analytics-metrics";
+  for (const [label, value] of metricList) {
+    const metric = document.createElement("div");
+    metric.className = "analytics-metric";
+    const metricValue = document.createElement("strong");
+    metricValue.textContent = formattedMetric(value);
+    const metricLabel = document.createElement("small");
+    metricLabel.textContent = label;
+    metric.append(metricValue, metricLabel);
+    metricGrid.append(metric);
+  }
+  card.append(metricGrid);
+
+  if (account.provider === "youtube" && account.channel) {
+    const channelSummary = document.createElement("p");
+    channelSummary.className = "analytics-channel-summary";
+    const subscribers = account.channel.subscribers == null
+      ? "Subscriber count hidden"
+      : `${formattedMetric(account.channel.subscribers)} subscribers`;
+    channelSummary.textContent = `${subscribers} · ${formattedMetric(account.channel.views)} lifetime views · ${formattedMetric(account.channel.videos)} videos · ${formattedMetric(metrics.watch_minutes)} watch minutes this period`;
+    card.append(channelSummary);
+  } else if (account.provider === "instagram") {
+    const note = document.createElement("p");
+    note.className = "analytics-channel-summary";
+    note.textContent = "Likes and comments on posts published during this period.";
+    card.append(note);
+  }
+
+  const topPosts = account.top_posts || [];
+  const postsHeading = document.createElement("div");
+  postsHeading.className = "analytics-posts-heading";
+  const postsTitle = document.createElement("h3");
+  postsTitle.textContent = "Top posts";
+  const postsBasis = document.createElement("small");
+  postsBasis.textContent = account.provider === "youtube" ? "Views in this period" : "Likes + comments";
+  postsHeading.append(postsTitle, postsBasis);
+  card.append(postsHeading);
+  if (!topPosts.length) {
+    const noPosts = document.createElement("p");
+    noPosts.className = "analytics-no-posts";
+    noPosts.textContent = "No post data for this period yet.";
+    card.append(noPosts);
+    return card;
+  }
+  const postList = document.createElement("ol");
+  postList.className = "analytics-post-list";
+  for (const post of topPosts) {
+    const row = document.createElement("li");
+    const link = document.createElement("a");
+    link.className = "analytics-post-link";
+    let safeUrl = null;
+    try { safeUrl = post.url ? new URL(post.url, window.location.origin) : null; } catch {}
+    const allowedHost = account.provider === "youtube"
+      ? ["www.youtube.com", "youtube.com"]
+      : ["www.instagram.com", "instagram.com"];
+    if (safeUrl?.protocol === "https:" && allowedHost.includes(safeUrl.hostname)) {
+      link.href = safeUrl.href;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    } else {
+      link.removeAttribute("href");
+    }
+    const postTitle = document.createElement("strong");
+    postTitle.textContent = post.title || "Untitled post";
+    const postDetails = document.createElement("small");
+    postDetails.textContent = account.provider === "youtube"
+      ? `${formattedMetric(post.views)} views · ${formattedMetric(post.likes)} likes · ${formattedMetric(post.comments)} comments`
+      : `${formattedMetric(post.likes)} likes · ${formattedMetric(post.comments)} comments`;
+    link.append(postTitle, postDetails);
+    row.append(link);
+    postList.append(row);
+  }
+  card.append(postList);
+  return card;
+}
+
+async function loadAnalytics() {
+  if (!authenticated) {
+    analyticsData = null;
+    analyticsError = null;
+    analyticsLoading = false;
+    renderAnalytics();
+    return;
+  }
+  const requestId = ++analyticsRequestId;
+  analyticsLoading = true;
+  analyticsError = null;
+  renderAnalytics();
+  try {
+    const result = await api(`/analytics?days=${encodeURIComponent(analyticsDays)}`);
+    if (requestId === analyticsRequestId) analyticsData = result;
+  } catch (error) {
+    if (requestId === analyticsRequestId) analyticsError = error.message;
+  } finally {
+    if (requestId === analyticsRequestId) {
+      analyticsLoading = false;
+      renderAnalytics();
+    }
+  }
+}
+
 function setPage(page, { recordHistory = true } = {}) {
-  if (!["overview", "connections", "content", "publish"].includes(page)) return;
+  if (!["overview", "analytics", "connections", "content", "publish"].includes(page)) return;
   activePage = page;
   document.querySelectorAll("[data-page-view]").forEach((view) => {
     view.hidden = view.dataset.pageView !== page;
@@ -278,7 +463,7 @@ function setPage(page, { recordHistory = true } = {}) {
       else item.removeAttribute("aria-current");
     }
   });
-  const pageLabels = { overview: "Overview", connections: "Channels", content: "Media library", publish: "Create a post" };
+  const pageLabels = { overview: "Overview", analytics: "Analytics", connections: "Channels", content: "Media library", publish: "Create a post" };
   $("#breadcrumb-label").textContent = pageLabels[page];
   document.title = `${pageLabels[page]} · Relay`;
   if (window.location.hash !== `#${page}`) {
@@ -286,6 +471,7 @@ function setPage(page, { recordHistory = true } = {}) {
     window.history[update]({}, "", `#${page}`);
   }
   window.scrollTo({ top: 0, behavior: "smooth" });
+  if (page === "analytics") void loadAnalytics();
 }
 
 function profileInitials(name) {
@@ -823,8 +1009,14 @@ document.querySelectorAll("[data-nav]").forEach((item) => {
 });
 window.addEventListener("popstate", () => {
   const page = window.location.hash.slice(1);
-  setPage(["overview", "connections", "content", "publish"].includes(page) ? page : "overview", { recordHistory: false });
+  setPage(["overview", "analytics", "connections", "content", "publish"].includes(page) ? page : "overview", { recordHistory: false });
 });
+$("#analytics-range").addEventListener("change", (event) => {
+  analyticsDays = Number(event.target.value);
+  void loadAnalytics();
+});
+$("#refresh-analytics").addEventListener("click", () => { void loadAnalytics(); });
+$("#analytics-unlock").addEventListener("click", () => showUnlock());
 $("#empty-connect").addEventListener("click", () => {
   if (!authenticated) { showUnlock(); return; }
   $("#add-channel").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -876,6 +1068,7 @@ $("#unlock-form").addEventListener("submit", async (event) => {
     renderSession();
     await loadAccounts();
     await loadContent();
+    if (activePage === "analytics") await loadAnalytics();
     pendingProvider = null;
     if (provider) await connect(provider, true);
     else notice("Workspace unlocked. You're ready to connect.");
@@ -1171,7 +1364,7 @@ $("#instagram-publish-ready").addEventListener("click", async () => {
 async function initialize() {
   try {
     const initialPage = window.location.hash.slice(1);
-    setPage(["overview", "connections", "content", "publish"].includes(initialPage) ? initialPage : "overview", { recordHistory: false });
+    setPage(["overview", "analytics", "connections", "content", "publish"].includes(initialPage) ? initialPage : "overview", { recordHistory: false });
     const state = await api("/session");
     authenticated = state.authenticated;
     instagramMediaConfigured = state.publishing?.instagram_media_configured === true;
@@ -1202,6 +1395,7 @@ async function initialize() {
     }
     await loadAccounts();
     await loadContent();
+    if (activePage === "analytics") await loadAnalytics();
     const params = new URLSearchParams(window.location.search);
     const connected = params.get("connected");
     const error = params.get("oauth_error");

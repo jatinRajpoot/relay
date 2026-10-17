@@ -3,6 +3,7 @@ import mimetypes
 import secrets
 import time
 from contextlib import asynccontextmanager
+from datetime import date, timedelta
 from pathlib import Path
 from tempfile import SpooledTemporaryFile
 from typing import Annotated, Literal
@@ -342,6 +343,58 @@ def create_app(settings: Settings | None = None, transport=None):
                 if avatar_url:
                     rows[index] = store.update_account_avatar(row["id"], avatar_url)
         return {"accounts": [store.public_account(row) for row in rows]}
+
+    @app.get("/analytics", dependencies=protected, tags=["Analytics"])
+    async def analytics(days: int = 30):
+        """Get provider performance for connected Instagram and YouTube accounts."""
+        if days not in {7, 30, 90}:
+            raise HTTPException(422, "Choose a reporting period of 7, 30, or 90 days.")
+        end = date.today()
+        start = end - timedelta(days=days - 1)
+        period = {"days": days, "start_date": start.isoformat(), "end_date": end.isoformat()}
+        results = []
+        for account in store.list_accounts():
+            item = {
+                "account_id": account["id"],
+                "provider": account["provider"],
+                "name": account["name"],
+                "status": "ready",
+            }
+            try:
+                account = await valid_account(account["id"], account["provider"])
+                token = store.decrypt(account["access_token"])
+                if account["provider"] == "youtube":
+                    item.update(
+                        await app.state.providers.youtube_analytics(
+                            account["external_id"], token, period["start_date"], period["end_date"]
+                        )
+                    )
+                else:
+                    posts = await app.state.providers.instagram_media(
+                        account["external_id"], token, period["start_date"]
+                    )
+                    likes = sum(post["likes"] for post in posts)
+                    comments = sum(post["comments"] for post in posts)
+                    item["period"] = {
+                        "posts": len(posts),
+                        "likes": likes,
+                        "comments": comments,
+                        "average_interactions": round((likes + comments) / len(posts), 1)
+                        if posts
+                        else 0,
+                    }
+                    item["top_posts"] = sorted(
+                        posts,
+                        key=lambda post: (post["likes"] + post["comments"], post["published_at"]),
+                        reverse=True,
+                    )[:5]
+            except HTTPException:
+                item["status"] = "unavailable"
+                item["message"] = (
+                    "Analytics could not be loaded. Reconnect this channel or try again later."
+                )
+            results.append(item)
+        return {"period": period, "accounts": results}
 
     @app.post("/accounts/{account_id}/refresh", dependencies=protected, tags=["Accounts"])
     async def refresh(account_id: str):

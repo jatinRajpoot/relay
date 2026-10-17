@@ -27,7 +27,7 @@ The default SQLite file is `data/relay.sqlite3`. Preserve `TOKEN_ENCRYPTION_KEY`
 
 ### YouTube
 
-1. Enable **YouTube Data API v3** in your Google Cloud project.
+1. Enable **YouTube Data API v3** and **YouTube Analytics API** in your Google Cloud project.
 2. Configure the OAuth consent screen and add your Google account as a test user while testing.
 3. Use a **Web application** OAuth client with the ID/secret in `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET`.
 4. Register this exact authorized redirect URI: `http://localhost:8000/oauth/youtube/callback`.
@@ -57,6 +57,10 @@ In `/docs`, execute `POST /oauth/youtube/authorize` or `POST /oauth/instagram/au
 OAuth state is random, hashed in SQLite, bound to an HttpOnly browser cookie, expires after 10 minutes, and is consumed atomically once. Google additionally uses PKCE S256. A callback does not require an API key because its state/cookie binds it to an authenticated start request. Starting with curl and then opening the URL in an unrelated browser will fail cookie verification.
 
 Use `GET /accounts` to list connected accounts. Each account has its own local ID, separate from its provider `external_id`. Reconnecting the same provider account updates its tokens and preserves the local ID and existing refresh token when no replacement is returned.
+
+## View channel analytics
+
+Open **Analytics** in the workspace to choose a 7, 30, or 90 day period. YouTube shows channel totals, views, likes, comments, subscriber gains, and top videos from YouTube Analytics. Instagram shows likes and comments on media published during the selected period, ranked by interactions. Instagram reach and impressions are not included. Analytics are fetched from the connected providers and require an unlocked workspace; YouTube's Analytics API must be enabled in the Google Cloud project.
 
 Access tokens refresh automatically **when used** near expiry (YouTube: two minutes, Instagram: one day). `POST /accounts/{id}/refresh` explicitly refreshes and saves the result. There is no background scheduler: an unused Instagram connection that expires must be reauthorized. A provider revocation or Google's `invalid_grant` also requires reconnecting.
 
@@ -116,6 +120,7 @@ The job atomically claims publication to prevent simultaneous requests from publ
 | GET | `/accounts` | List metadata, without tokens |
 | POST | `/accounts/{id}/refresh` | Refresh stored authorization |
 | DELETE | `/accounts/{id}` | Remove local connection |
+| GET | `/analytics?days=30` | Fetch provider metrics for 7, 30, or 90 days |
 | GET | `/content` | List saved media library items |
 | POST | `/content` | Upload JPEG or video content to the media library |
 | POST | `/youtube/videos` | Multipart video upload or saved content selection |

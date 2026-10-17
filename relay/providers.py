@@ -1,5 +1,6 @@
 import base64
 import hashlib
+from datetime import datetime
 from urllib.parse import urlencode, urlsplit
 
 import httpx
@@ -296,6 +297,148 @@ class Providers:
             )
         )
         return self.required_id(data)
+
+    async def instagram_media(self, external_id, token, start_date):
+        """Return recent media and public interaction counts for one Instagram profile."""
+        items = []
+        after = None
+        for _ in range(5):
+            params = {
+                "fields": "id,caption,media_type,timestamp,permalink,like_count,comments_count",
+                "limit": 100,
+            }
+            if after:
+                params["after"] = after
+            data = self.payload(
+                await self.request(
+                    "GET",
+                    f"{self.instagram_url}/{external_id}/media",
+                    params=params,
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            )
+            page = data.get("data")
+            if not isinstance(page, list):
+                raise HTTPException(502, "Instagram returned an invalid media list.")
+            reached_start = False
+            for item in page:
+                try:
+                    published_at = datetime.fromisoformat(
+                        item["timestamp"].replace("Z", "+00:00")
+                    )
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if published_at.date().isoformat() < start_date:
+                    reached_start = True
+                    continue
+                items.append(
+                    {
+                        "id": str(item.get("id", "")),
+                        "title": (item.get("caption") or "Instagram post")[:160],
+                        "media_type": item.get("media_type", "POST"),
+                        "url": item.get("permalink"),
+                        "published_at": published_at.isoformat(),
+                        "likes": self.nonnegative_int(item.get("like_count")),
+                        "comments": self.nonnegative_int(item.get("comments_count")),
+                    }
+                )
+            paging = data.get("paging") or {}
+            cursors = paging.get("cursors") or {}
+            next_after = cursors.get("after")
+            if reached_start or not paging.get("next") or not next_after or len(page) < 100:
+                break
+            after = next_after
+        return items
+
+    @staticmethod
+    def nonnegative_int(value):
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError, OverflowError):
+            return 0
+
+    async def youtube_analytics(self, external_id, token, start_date, end_date):
+        """Return channel totals and top videos for a reporting period."""
+        headers = {"Authorization": f"Bearer {token}"}
+        channel = self.payload(
+            await self.request(
+                "GET",
+                "https://www.googleapis.com/youtube/v3/channels",
+                params={"part": "statistics", "id": external_id},
+                headers=headers,
+            )
+        )
+        channel_items = channel.get("items") or []
+        if not channel_items:
+            raise HTTPException(409, "YouTube channel is unavailable. Reconnect the account.")
+        statistics = channel_items[0].get("statistics") or {}
+
+        async def report(metrics, **extra):
+            params = {
+                "ids": "channel==MINE",
+                "startDate": start_date,
+                "endDate": end_date,
+                "metrics": metrics,
+                **extra,
+            }
+            return self.payload(
+                await self.request(
+                    "GET",
+                    "https://youtubeanalytics.googleapis.com/v2/reports",
+                    params=params,
+                    headers=headers,
+                )
+            )
+
+        summary = await report("views,likes,comments,subscribersGained,estimatedMinutesWatched")
+        summary_row = (summary.get("rows") or [[0, 0, 0, 0, 0]])[0]
+        top_report = await report(
+            "views,likes,comments", dimensions="video", sort="-views", maxResults=5
+        )
+        video_rows = top_report.get("rows") or []
+        video_ids = [str(row[0]) for row in video_rows if row and row[0]]
+        video_titles = {}
+        if video_ids:
+            videos = self.payload(
+                await self.request(
+                    "GET",
+                    "https://www.googleapis.com/youtube/v3/videos",
+                    params={"part": "snippet", "id": ",".join(video_ids)},
+                    headers=headers,
+                )
+            )
+            video_titles = {
+                item.get("id"): (item.get("snippet") or {}).get("title", "YouTube video")
+                for item in videos.get("items", [])
+            }
+        return {
+            "channel": {
+                "views": self.nonnegative_int(statistics.get("viewCount")),
+                "subscribers": self.nonnegative_int(statistics["subscriberCount"])
+                if "subscriberCount" in statistics
+                else None,
+                "videos": self.nonnegative_int(statistics.get("videoCount")),
+            },
+            "period": {
+                "views": self.nonnegative_int(summary_row[0] if len(summary_row) > 0 else 0),
+                "likes": self.nonnegative_int(summary_row[1] if len(summary_row) > 1 else 0),
+                "comments": self.nonnegative_int(summary_row[2] if len(summary_row) > 2 else 0),
+                "subscribers_gained": self.nonnegative_int(summary_row[3] if len(summary_row) > 3 else 0),
+                "watch_minutes": self.nonnegative_int(summary_row[4] if len(summary_row) > 4 else 0),
+            },
+            "top_posts": [
+                {
+                    "id": str(row[0]),
+                    "title": video_titles.get(str(row[0]), "YouTube video"),
+                    "url": f"https://www.youtube.com/watch?v={row[0]}",
+                    "views": self.nonnegative_int(row[1] if len(row) > 1 else 0),
+                    "likes": self.nonnegative_int(row[2] if len(row) > 2 else 0),
+                    "comments": self.nonnegative_int(row[3] if len(row) > 3 else 0),
+                }
+                for row in video_rows
+                if row
+            ],
+        }
 
     async def upload_youtube(self, token, file: UploadFile, metadata):
         content_type = file.content_type or "application/octet-stream"
