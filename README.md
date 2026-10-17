@@ -163,9 +163,13 @@ Register these exact callback URLs in the corresponding provider dashboards:
 - Google: `https://relay-42733239266.asia-south1.run.app/oauth/youtube/callback`
 - Meta: `https://relay-42733239266.asia-south1.run.app/oauth/instagram/callback`
 
-Redeploy from the repository root with `./scripts/deploy.ps1`. This uses Cloud Build;
-GitHub pushes do not automatically redeploy. Storage, Secret Manager, image storage,
-builds, requests, and network usage can incur charges even with minimum instances zero.
+Pushes to `main` automatically deploy the source to Cloud Run through
+`.github/workflows/deploy-cloud-run.yml`. GitHub Actions authenticates with Google
+Cloud using Workload Identity Federation; no service-account key is stored in GitHub.
+The deploy identity is restricted to this repository's `main` push workflow. For a
+manual deployment, run `./scripts/deploy.ps1` from the repository root. Storage, Secret
+Manager, image storage, builds, requests, and network usage can incur charges even with
+minimum instances zero.
 No Cloud SQL, load balancer, scheduler, or always-on VM is provisioned.
 
 ## Run checks
