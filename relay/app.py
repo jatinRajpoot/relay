@@ -291,12 +291,12 @@ def create_app(settings: Settings | None = None, transport=None):
                 )
             if not code:
                 raise HTTPException(400, "Missing authorization code. Start again.")
-            tokens, external_id, name, scopes = await app.state.providers.exchange(
+            tokens, external_id, name, scopes, avatar_url = await app.state.providers.exchange(
                 provider,
                 code,
                 saved["verifier"],
             )
-            account = store.save_account(provider, external_id, name, tokens, scopes)
+            account = store.save_account(provider, external_id, name, tokens, scopes, avatar_url)
             result = (
                 RedirectResponse(
                     f"/oauth/complete?provider={provider}&result=connected"
@@ -323,8 +323,25 @@ def create_app(settings: Settings | None = None, transport=None):
         return result
 
     @app.get("/accounts", dependencies=protected, tags=["Accounts"])
-    async def accounts():
-        return {"accounts": [store.public_account(row) for row in store.list_accounts()]}
+    async def accounts(include_avatars: bool = False):
+        rows = store.list_accounts()
+        if include_avatars:
+            for index, row in enumerate(rows):
+                if row.get("avatar_url"):
+                    continue
+                try:
+                    account = await valid_account(row["id"], row["provider"])
+                    avatar_url = await app.state.providers.account_avatar(
+                        account["provider"],
+                        account["external_id"],
+                        store.decrypt(account["access_token"]),
+                    )
+                except HTTPException:
+                    # A missing avatar should never prevent account selection.
+                    continue
+                if avatar_url:
+                    rows[index] = store.update_account_avatar(row["id"], avatar_url)
+        return {"accounts": [store.public_account(row) for row in rows]}
 
     @app.post("/accounts/{account_id}/refresh", dependencies=protected, tags=["Accounts"])
     async def refresh(account_id: str):

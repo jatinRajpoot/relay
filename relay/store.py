@@ -73,6 +73,9 @@ class Store:
                 )
             if "popup" not in columns:
                 db.execute("ALTER TABLE oauth_states ADD COLUMN popup INTEGER NOT NULL DEFAULT 0")
+            account_columns = {row[1] for row in db.execute("PRAGMA table_info(accounts)")}
+            if "avatar_url" not in account_columns:
+                db.execute("ALTER TABLE accounts ADD COLUMN avatar_url TEXT")
 
     @contextmanager
     def connection(self):
@@ -162,17 +165,21 @@ class Store:
             else None
         )
 
-    def save_account(self, provider, external_id, name, tokens, scopes):
+    def save_account(self, provider, external_id, name, tokens, scopes, avatar_url=None):
         now = int(time.time())
         with self.connection() as db:
             db.execute(
                 """
-                INSERT INTO accounts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO accounts (
+                    id, provider, external_id, name, access_token, refresh_token,
+                    expires_at, scopes, token_updated_at, created_at, avatar_url
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(provider, external_id) DO UPDATE SET
                     name=excluded.name, access_token=excluded.access_token,
                     refresh_token=COALESCE(excluded.refresh_token, accounts.refresh_token),
                     expires_at=excluded.expires_at, scopes=excluded.scopes,
-                    token_updated_at=excluded.token_updated_at
+                    token_updated_at=excluded.token_updated_at,
+                    avatar_url=COALESCE(excluded.avatar_url, accounts.avatar_url)
             """,
                 (
                     secrets.token_hex(16),
@@ -185,6 +192,7 @@ class Store:
                     scopes,
                     now,
                     now,
+                    avatar_url,
                 ),
             )
             row = db.execute(
@@ -201,6 +209,14 @@ class Store:
     def list_accounts(self):
         with self.connection() as db:
             return [dict(row) for row in db.execute("SELECT * FROM accounts ORDER BY created_at")]
+
+    def update_account_avatar(self, account_id, avatar_url):
+        with self.connection() as db:
+            db.execute(
+                "UPDATE accounts SET avatar_url=? WHERE id=? AND avatar_url IS NULL",
+                (avatar_url, account_id),
+            )
+        return self.get_account(account_id)
 
     def update_tokens(self, account_id, tokens):
         now = int(time.time())
@@ -236,6 +252,7 @@ class Store:
                 "expires_at",
                 "scopes",
                 "created_at",
+                "avatar_url",
             )
         } | {"has_refresh_token": bool(account["refresh_token"])}
 

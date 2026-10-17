@@ -73,6 +73,40 @@ class Providers:
             raise HTTPException(502, "Provider did not return a resource identifier.")
         return str(value)
 
+    @staticmethod
+    def youtube_avatar(snippet):
+        thumbnails = (snippet or {}).get("thumbnails") or {}
+        return next(
+            (
+                thumbnails[size].get("url")
+                for size in ("medium", "high", "default")
+                if isinstance(thumbnails.get(size), dict) and thumbnails[size].get("url")
+            ),
+            None,
+        )
+
+    async def account_avatar(self, provider, external_id, token):
+        if provider == "youtube":
+            data = self.payload(
+                await self.request(
+                    "GET",
+                    "https://www.googleapis.com/youtube/v3/channels",
+                    params={"part": "snippet", "id": external_id},
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            )
+            channels = data.get("items") or []
+            return self.youtube_avatar(channels[0].get("snippet")) if channels else None
+        data = self.payload(
+            await self.request(
+                "GET",
+                f"{self.instagram_url}/me",
+                params={"fields": "profile_picture_url"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        )
+        return data.get("profile_picture_url")
+
     def authorization_url(self, provider, state, verifier):
         client_id, client_secret = self.settings.credentials(provider)
         if not client_id or not client_secret:
@@ -136,11 +170,14 @@ class Providers:
                     409, "Select an account with one YouTube channel and reconnect."
                 )
             channel = channels[0]
+            snippet = channel.get("snippet") or {}
+            avatar_url = self.youtube_avatar(snippet)
             return (
                 tokens,
                 self.required_id(channel),
-                channel.get("snippet", {}).get("title", "YouTube"),
+                snippet.get("title", "YouTube"),
                 granted,
+                avatar_url,
             )
 
         # Meta documents multipart form data for the authorization-code exchange.
@@ -184,7 +221,7 @@ class Providers:
             await self.request(
                 "GET",
                 f"{self.instagram_url}/me",
-                params={"fields": "user_id,username"},
+                params={"fields": "user_id,username,profile_picture_url"},
                 headers={"Authorization": f"Bearer {tokens['access_token']}"},
             )
         )
@@ -193,6 +230,7 @@ class Providers:
             self.required_id(profile, "user_id"),
             profile.get("username", "Instagram"),
             INSTAGRAM_SCOPES,
+            profile.get("profile_picture_url"),
         )
 
     async def refresh(self, provider, access_token, refresh_token):

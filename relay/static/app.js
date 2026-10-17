@@ -11,9 +11,12 @@ let disconnecting = null;
 let instagramMediaConfigured = false;
 let contentStorageConfigured = false;
 let maxUploadBytes = 0;
-let activeInstagramPost = null;
-let activePage = "connections";
-let activeComposer = "instagram";
+let activeInstagramPosts = [];
+let youtubeUploadResults = [];
+let selectedContentId = null;
+let selectedAccountIds = new Set();
+let publishing = false;
+let activePage = "overview";
 const providerConfigured = { instagram: true, youtube: true };
 const providerIssues = { instagram: null, youtube: null };
 
@@ -85,21 +88,22 @@ function renderSession() {
   button.classList.toggle("unlocked", authenticated);
   button.querySelector("span").textContent = authenticated ? "Lock workspace" : "Unlock workspace";
   $("#empty-foot").hidden = authenticated;
-  $("#empty-connect").textContent = authenticated ? "Choose a platform" : "Unlock workspace";
+  $("#empty-connect").textContent = authenticated ? "Connect a channel" : "Unlock workspace";
   $("#empty-description").textContent = authenticated
     ? "Connect Instagram or YouTube to start publishing."
     : "Unlock your workspace to view or connect an account.";
-  renderInstagramPublisher();
-  renderYoutubePublisher();
   if (!authenticated) {
     accountList = [];
     contentItems = [];
-    activeInstagramPost = null;
+    selectedAccountIds.clear();
+    selectedContentId = null;
+    activeInstagramPosts = [];
+    youtubeUploadResults = [];
+    publishing = false;
     $("#accounts-list").replaceChildren();
     $("#accounts-list").hidden = true;
     $("#empty-state").hidden = false;
-    $("#publish-check").hidden = true;
-    $("#publish-now").hidden = true;
+    $("#publish-results-section").hidden = true;
     $("#account-count").textContent = "—";
     $("#nav-count").textContent = "—";
     for (const provider of Object.keys(names)) {
@@ -108,37 +112,175 @@ function renderSession() {
     }
   }
   renderContent();
-  renderContentSelectors();
-  syncPublishButtons();
-  updateConnectionSummary();
+  renderComposer();
+  renderWorkspaceFlow();
 }
 
-function updateConnectionSummary() {
-  const total = accountList.length;
-  $("#summary-count").textContent = `${total} ${total === 1 ? "channel" : "channels"} connected`;
-  $("#summary-description").textContent = !authenticated
-    ? "Unlock to see your channels"
-    : total ? "Choose one when you create a post" : "Connect a channel to get started";
-  $("#instagram-connect-help").hidden = !authenticated || accountList.some((account) => account.provider === "instagram");
-  $("#youtube-connect-help").hidden = !authenticated || accountList.some((account) => account.provider === "youtube");
+function renderWorkspaceFlow() {
+  const hasChannel = authenticated && accountList.length > 0;
+  const hasMedia = authenticated && contentItems.length > 0;
+  let status = "Unlock to begin";
+  let description = "Unlock your workspace, then connect a channel to get started.";
+  if (authenticated && !hasChannel) {
+    status = "Connect your first channel";
+    description = "Start by connecting Instagram or YouTube. You can add more channels later.";
+  } else if (hasChannel && !contentStorageConfigured) {
+    status = "Media storage needs setup";
+    description = "Your channels are connected. Configure media storage to add content and publish.";
+  } else if (hasChannel && !hasMedia) {
+    status = "Add your first media";
+    description = "Your channels are connected. Upload a photo or video to continue.";
+  } else if (hasChannel && hasMedia) {
+    status = "Ready to publish";
+    description = "Your workspace is ready. Create a post whenever you are.";
+  }
+  $("#workflow-status").textContent = status;
+  $("#workflow-description").textContent = description;
+  const states = {
+    channels: hasChannel ? "complete" : "current",
+    media: hasChannel ? (hasMedia ? "complete" : "current") : "upcoming",
+    publish: hasMedia ? "current" : "upcoming",
+  };
+  document.querySelectorAll("[data-flow-step]").forEach((step, index) => {
+    const state = states[step.dataset.flowStep];
+    step.dataset.flowState = state;
+    step.querySelector(".flow-number").textContent = state === "complete" ? "✓" : String(index + 1);
+    if (state === "current") step.setAttribute("aria-current", "step");
+    else step.removeAttribute("aria-current");
+  });
+  renderOverview();
+}
+
+function renderOverview() {
+  const channelCount = $("#overview-channel-count");
+  if (!channelCount) return;
+  $("#overview-channel-count").textContent = authenticated ? String(accountList.length) : "—";
+  $("#overview-channel-detail").textContent = !authenticated
+    ? "Unlock to view your accounts"
+    : accountList.length ? `${accountList.length} publishing ${accountList.length === 1 ? "destination" : "destinations"}` : "Connect Instagram or YouTube";
+  $("#overview-media-count").textContent = authenticated ? String(contentItems.length) : "—";
+  $("#overview-media-detail").textContent = !authenticated
+    ? "Unlock to view your library"
+    : contentItems.length ? "Photos and videos ready to use" : "Upload a photo or video to begin";
+
+  let readiness = "Locked";
+  let readinessDetail = "Unlock to get started";
+  if (authenticated && !accountList.length) {
+    readiness = "Set up channels";
+    readinessDetail = "Connect Instagram or YouTube";
+  } else if (authenticated && !contentStorageConfigured) {
+    readiness = "Setup needed";
+    readinessDetail = "Configure media storage to upload";
+  } else if (authenticated && !contentItems.length) {
+    readiness = "Add media";
+    readinessDetail = "Your channels are ready for content";
+  } else if (authenticated) {
+    readiness = "Ready to create";
+    readinessDetail = "Choose a channel and publish";
+  }
+  $("#overview-readiness").textContent = readiness;
+  $("#overview-readiness-detail").textContent = readinessDetail;
+
+  const channelList = $("#overview-channel-list");
+  channelList.replaceChildren();
+  if (!authenticated || !accountList.length) {
+    const empty = document.createElement("div");
+    empty.className = "overview-channel-empty";
+    const icon = document.createElement("span");
+    icon.className = "channel-mini-icon";
+    const symbol = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    symbol.classList.add("icon");
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", "#i-link");
+    symbol.append(use);
+    icon.append(symbol);
+    const copy = document.createElement("span");
+    const title = document.createElement("strong");
+    const detail = document.createElement("small");
+    title.textContent = authenticated ? "No channels connected" : "Unlock your workspace";
+    detail.textContent = authenticated ? "Connect a channel to start publishing." : "Your connected channels will show up here.";
+    copy.append(title, detail);
+    empty.append(icon, copy);
+    channelList.append(empty);
+    const action = document.createElement("button");
+    action.className = "overview-channel-action";
+    action.type = "button";
+    action.textContent = authenticated ? "Connect a channel" : "Open channels";
+    action.addEventListener("click", () => setPage("connections"));
+    channelList.append(action);
+  } else {
+    for (const account of accountList.slice(0, 3)) {
+      const row = document.createElement("div");
+      row.className = "overview-channel-row";
+      const icon = document.createElement("span");
+      icon.className = `channel-mini-icon ${account.provider}`;
+      const symbol = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      symbol.classList.add("icon");
+      const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+      use.setAttribute("href", `#i-${account.provider}`);
+      symbol.append(use);
+      icon.append(symbol);
+      const copy = document.createElement("span");
+      const title = document.createElement("strong");
+      const detail = document.createElement("small");
+      title.textContent = account.name;
+      detail.textContent = names[account.provider];
+      copy.append(title, detail);
+      const expired = account.expires_at * 1000 <= Date.now();
+      const status = document.createElement("span");
+      status.className = `overview-channel-status${expired ? " expired" : ""}`;
+      status.textContent = expired ? "Reconnect" : "Connected";
+      row.append(icon, copy, status);
+      channelList.append(row);
+    }
+    if (accountList.length > 3) {
+      const more = document.createElement("small");
+      more.className = "overview-channel-more";
+      more.textContent = `+ ${accountList.length - 3} more ${accountList.length - 3 === 1 ? "channel" : "channels"}`;
+      channelList.append(more);
+    }
+  }
+
+  const mediaList = $("#overview-media-list");
+  const mediaEmpty = $("#overview-media-empty");
+  mediaList.replaceChildren();
+  if (authenticated && contentStorageConfigured && contentItems.length) {
+    mediaEmpty.hidden = true;
+    mediaList.hidden = false;
+    for (const item of contentItems.slice(0, 3)) mediaList.append(makeMediaCard(item, { compact: true }));
+  } else {
+    mediaEmpty.hidden = false;
+    mediaList.hidden = true;
+    if (!authenticated) {
+      $("#overview-media-empty-title").textContent = "Unlock to see your recent media.";
+      $("#overview-media-empty-description").textContent = "Your saved photos and videos will appear here.";
+    } else if (!contentStorageConfigured) {
+      $("#overview-media-empty-title").textContent = "Media storage needs setup.";
+      $("#overview-media-empty-description").textContent = "Configure media storage on the service to add photos and videos.";
+    } else {
+      $("#overview-media-empty-title").textContent = "Your media has a home here.";
+      $("#overview-media-empty-description").textContent = "Upload a photo or video and it’ll be ready whenever you create a post.";
+    }
+  }
 }
 
 function setPage(page, { recordHistory = true } = {}) {
-  if (!["connections", "content", "publish"].includes(page)) return;
+  if (!["overview", "connections", "content", "publish"].includes(page)) return;
   activePage = page;
   document.querySelectorAll("[data-page-view]").forEach((view) => {
     view.hidden = view.dataset.pageView !== page;
   });
   document.querySelectorAll("[data-nav]").forEach((item) => {
     const selected = item.dataset.nav === page;
-    item.classList.toggle("active", selected);
+    if (item.classList.contains("nav-item")) item.classList.toggle("active", selected);
     if (item.matches("a")) {
-      if (selected) item.setAttribute("aria-current", "page");
+      if (selected && item.classList.contains("nav-item")) item.setAttribute("aria-current", "page");
       else item.removeAttribute("aria-current");
     }
   });
-  const pageLabels = { connections: "Connections", content: "Content", publish: "Publish" };
+  const pageLabels = { overview: "Overview", connections: "Channels", content: "Media library", publish: "Create a post" };
   $("#breadcrumb-label").textContent = pageLabels[page];
+  document.title = `${pageLabels[page]} · Relay`;
   if (window.location.hash !== `#${page}`) {
     const update = recordHistory ? "pushState" : "replaceState";
     window.history[update]({}, "", `#${page}`);
@@ -146,105 +288,333 @@ function setPage(page, { recordHistory = true } = {}) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function setComposer(provider) {
-  if (provider !== "instagram" && provider !== "youtube") return;
-  activeComposer = provider;
-  document.querySelectorAll("[data-composer]").forEach((tab) => {
-    const selected = tab.dataset.composer === provider;
-    tab.classList.toggle("active", selected);
-    tab.setAttribute("aria-selected", String(selected));
-  });
-  document.querySelectorAll("[data-composer-panel]").forEach((panel) => {
-    const selected = panel.dataset.composerPanel === provider;
-    panel.classList.toggle("active", selected);
-    panel.hidden = !selected;
-  });
+function profileInitials(name) {
+  return String(name || "?").trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?";
 }
 
-function renderInstagramPublisher() {
-  const select = $("#publish-account");
-  const selected = select.value;
-  select.replaceChildren();
-  const instagramAccounts = accountList.filter((account) => account.provider === "instagram");
-  if (!authenticated) {
-    select.add(new Option("Unlock to choose an Instagram account", ""));
-    select.disabled = true;
-  } else if (!instagramAccounts.length) {
-    select.add(new Option("Connect an Instagram account first", ""));
-    select.disabled = true;
-  } else {
-    select.add(new Option("Choose an Instagram account", ""));
-    for (const account of instagramAccounts) select.add(new Option(account.name, account.id));
-    select.disabled = false;
-    if (instagramAccounts.some((account) => account.id === selected)) select.value = selected;
+function makeProfileAvatar(account, provider, size = "") {
+  const avatar = document.createElement("span");
+  avatar.className = `profile-avatar ${provider} ${size}`.trim();
+  const initials = document.createElement("span");
+  initials.className = "profile-avatar-initials";
+  initials.textContent = profileInitials(account.name);
+  avatar.append(initials);
+  if (account.avatar_url) {
+    const image = document.createElement("img");
+    image.src = account.avatar_url;
+    image.alt = `${account.name} profile photo`;
+    image.loading = "lazy";
+    image.referrerPolicy = "no-referrer";
+    image.addEventListener("error", () => image.remove(), { once: true });
+    avatar.append(image);
   }
-  if (!instagramMediaConfigured) {
-    $("#publish-status").textContent = "Set INSTAGRAM_MEDIA_BUCKET to enable media storage.";
-    $("#publish-start").disabled = true;
-  } else {
-    $("#publish-start").disabled = !authenticated || !instagramAccounts.length;
-    if (!activeInstagramPost) $("#publish-status").textContent = "Choose saved content to prepare an Instagram post.";
+  const badge = document.createElement("span");
+  badge.className = "profile-platform-badge";
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `#i-${provider}`);
+  icon.append(use);
+  badge.append(icon);
+  avatar.append(badge);
+  return avatar;
+}
+
+function canUseMedia(item, provider) {
+  return provider === "instagram" ? item.instagram_compatible : item.youtube_compatible;
+}
+
+function mediaKind(item) {
+  return item.content_type.startsWith("image/") ? "Photo" : "Video";
+}
+
+function renderComposerMedia() {
+  const grid = $("#composer-media-grid");
+  const empty = $("#composer-media-empty");
+  grid.replaceChildren();
+  const emptyTitle = $("#composer-media-empty-title");
+  const emptyCopy = $("#composer-media-empty-copy");
+  const emptyAction = empty.querySelector("button");
+  if (!authenticated) {
+    emptyTitle.textContent = "Unlock your workspace to see your media";
+    emptyCopy.textContent = "Your saved photos and videos will show here as visual previews.";
+    emptyAction.textContent = "Open media library";
+    empty.hidden = false;
+    grid.hidden = true;
+    return;
+  }
+  if (!contentStorageConfigured) {
+    emptyTitle.textContent = "Media storage needs setup";
+    emptyCopy.textContent = "Configure content storage on the service before adding or publishing media.";
+    emptyAction.hidden = true;
+    empty.hidden = false;
+    grid.hidden = true;
+    return;
+  }
+  emptyAction.hidden = false;
+  emptyAction.innerHTML = 'Open media library <svg class="icon"><use href="#i-arrow"/></svg>';
+  if (!contentItems.length) {
+    emptyTitle.textContent = "Your library is ready for its first upload";
+    emptyCopy.textContent = "Add a photo or video, then choose it here by its preview.";
+    empty.hidden = false;
+    grid.hidden = true;
+    return;
+  }
+  empty.hidden = true;
+  grid.hidden = false;
+  for (const item of contentItems) {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "composer-media-option";
+    option.setAttribute("aria-pressed", String(item.id === selectedContentId));
+    option.disabled = publishing;
+    if (item.id === selectedContentId) option.classList.add("selected");
+    const preview = document.createElement("span");
+    preview.className = "composer-media-preview";
+    if (item.content_type.startsWith("image/")) {
+      const image = document.createElement("img");
+      image.src = item.media_url;
+      image.alt = "";
+      image.loading = "lazy";
+      preview.append(image);
+    } else {
+      const video = document.createElement("video");
+      video.src = item.media_url;
+      video.muted = true;
+      video.loop = true;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.preload = "metadata";
+      preview.append(video);
+      const play = document.createElement("span");
+      play.className = "media-play-marker";
+      play.textContent = "▶";
+      preview.append(play);
+    }
+    const details = document.createElement("span");
+    details.className = "composer-media-copy";
+    const filename = document.createElement("strong");
+    filename.textContent = item.filename;
+    const metadata = document.createElement("small");
+    metadata.textContent = `${mediaKind(item)} · ${formatBytes(item.size)}`;
+    const platforms = document.createElement("span");
+    platforms.className = "composer-media-platforms";
+    if (item.instagram_compatible) platforms.append(makeMediaTag("Instagram", "instagram"));
+    if (item.youtube_compatible) platforms.append(makeMediaTag("YouTube", "youtube"));
+    details.append(filename, metadata, platforms);
+    const selected = document.createElement("span");
+    selected.className = "media-selected-mark";
+    selected.textContent = "✓";
+    option.append(preview, details, selected);
+    option.addEventListener("click", () => selectComposerMedia(item));
+    grid.append(option);
   }
 }
 
-function renderYoutubePublisher() {
-  const select = $("#youtube-publish-account");
-  const selected = select.value;
-  const youtubeAccounts = accountList.filter((account) => account.provider === "youtube");
-  select.replaceChildren();
-  if (!authenticated) {
-    select.add(new Option("Unlock to choose a YouTube channel", ""));
-    select.disabled = true;
-  } else if (!youtubeAccounts.length) {
-    select.add(new Option("Connect a YouTube account first", ""));
-    select.disabled = true;
-  } else {
-    select.add(new Option("Choose a YouTube channel", ""));
-    for (const account of youtubeAccounts) select.add(new Option(account.name, account.id));
-    select.disabled = false;
-    if (youtubeAccounts.some((account) => account.id === selected)) select.value = selected;
+function selectComposerMedia(item) {
+  if (publishing) return;
+  const blocked = accountList.filter((account) => selectedAccountIds.has(account.id) && !canUseMedia(item, account.provider));
+  if (blocked.length) {
+    const providers = [...new Set(blocked.map((account) => names[account.provider]))].join(" and ");
+    notice(`This ${mediaKind(item).toLowerCase()} can't be sent to your selected ${providers} profile${blocked.length === 1 ? "" : "s"}. Deselect those profiles first.`, true);
+    return;
   }
-  $("#youtube-publish-submit").disabled = !authenticated || !youtubeAccounts.length;
+  selectedContentId = selectedContentId === item.id ? null : item.id;
+  renderComposer();
+}
+
+function renderDestinationGroup(provider) {
+  const accounts = accountList.filter((account) => account.provider === provider);
+  const container = $(`#${provider}-destinations`);
+  const count = $(`#${provider}-destination-count`);
+  container.replaceChildren();
+  count.textContent = accounts.length ? `${accounts.length} ${accounts.length === 1 ? "profile" : "profiles"}` : "Not connected";
+  if (!authenticated || !accounts.length) {
+    const empty = document.createElement("div");
+    empty.className = "destination-empty";
+    const text = document.createElement("span");
+    text.textContent = !authenticated ? "Unlock to see your connected profiles." : `Connect an ${names[provider]} profile to publish here.`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "text-button destination-connect";
+    button.textContent = authenticated ? `Connect ${names[provider]}` : "Unlock workspace";
+    button.addEventListener("click", () => authenticated ? setPage("connections") : showUnlock());
+    empty.append(text, button);
+    container.append(empty);
+    return;
+  }
+  for (const account of accounts) {
+    const choice = document.createElement("label");
+    const selected = selectedAccountIds.has(account.id);
+    const media = selectedContentId ? contentItems.find((item) => item.id === selectedContentId) : null;
+    const compatible = !media || canUseMedia(media, provider);
+    const configured = provider === "instagram" ? instagramMediaConfigured : contentStorageConfigured;
+    choice.className = `destination-choice${selected ? " selected" : ""}${!compatible ? " incompatible" : ""}`;
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = selected;
+    checkbox.disabled = publishing || !authenticated || !configured || !compatible;
+    checkbox.setAttribute("aria-label", `${selected ? "Remove" : "Add"} ${account.name} on ${names[provider]}`);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) selectedAccountIds.add(account.id);
+      else selectedAccountIds.delete(account.id);
+      renderComposer();
+    });
+    const profile = document.createElement("span");
+    profile.className = "destination-profile";
+    profile.append(makeProfileAvatar(account, provider));
+    const identity = document.createElement("span");
+    identity.className = "destination-identity";
+    const name = document.createElement("strong");
+    name.textContent = account.name;
+    const hint = document.createElement("small");
+    hint.textContent = selected ? "Selected for this post" : !configured ? "Publishing storage needs setup" : !compatible ? `${mediaKind(media)} isn't supported here` : names[provider];
+    identity.append(name, hint);
+    const checkmark = document.createElement("span");
+    checkmark.className = "destination-checkmark";
+    checkmark.textContent = "✓";
+    choice.append(checkbox, profile, identity, checkmark);
+    container.append(choice);
+  }
+  const configured = provider === "instagram" ? instagramMediaConfigured : contentStorageConfigured;
+  if (!configured) {
+    const note = document.createElement("small");
+    note.className = "destination-config-note";
+    note.textContent = provider === "instagram" ? "Set INSTAGRAM_MEDIA_BUCKET to enable Instagram publishing." : "Set content storage on the service to enable uploads.";
+    container.append(note);
+  }
+}
+
+function renderComposerDestinations() {
+  for (const provider of Object.keys(names)) renderDestinationGroup(provider);
+  const selected = accountList.filter((account) => selectedAccountIds.has(account.id));
+  const count = selected.length;
+  $("#selected-account-count").textContent = `${count} ${count === 1 ? "profile" : "profiles"} selected`;
+  $("#instagram-caption-targets").textContent = `Applied to ${selected.filter((account) => account.provider === "instagram").length} selected Instagram profile${selected.filter((account) => account.provider === "instagram").length === 1 ? "" : "s"}`;
+  $("#youtube-caption-targets").textContent = `Applied to ${selected.filter((account) => account.provider === "youtube").length} selected YouTube channel${selected.filter((account) => account.provider === "youtube").length === 1 ? "" : "s"}`;
+}
+
+function renderComposerDetails() {
+  const selected = accountList.filter((account) => selectedAccountIds.has(account.id));
+  const hasInstagram = selected.some((account) => account.provider === "instagram");
+  const hasYoutube = selected.some((account) => account.provider === "youtube");
+  $("#instagram-details").hidden = !hasInstagram;
+  $("#youtube-details").hidden = !hasYoutube;
+  $("#details-empty").hidden = hasInstagram || hasYoutube;
+  $("#publish-caption").disabled = publishing || !hasInstagram;
+  $("#youtube-publish-title").disabled = publishing || !hasYoutube;
+  $("#youtube-publish-title").required = hasYoutube;
+  $("#youtube-publish-description").disabled = publishing || !hasYoutube;
+  $("#youtube-publish-privacy").disabled = publishing || !hasYoutube;
+  $("#youtube-made-for-kids").disabled = publishing || !hasYoutube;
+}
+
+function renderComposerPreview() {
+  const item = contentItems.find((content) => content.id === selectedContentId);
+  const media = $("#composer-preview-media");
+  media.replaceChildren();
+  if (item) {
+    media.classList.add("has-media");
+    const node = document.createElement(item.content_type.startsWith("image/") ? "img" : "video");
+    node.src = item.media_url;
+    node.alt = item.content_type.startsWith("image/") ? item.filename : "Selected video preview";
+    if (node instanceof HTMLVideoElement) {
+      node.muted = true;
+      node.controls = true;
+      node.playsInline = true;
+      node.preload = "metadata";
+    }
+    media.append(node);
+    $("#preview-file-name").textContent = item.filename;
+    $("#preview-file-meta").textContent = `${mediaKind(item)} · ${formatBytes(item.size)}`;
+  } else {
+    media.classList.remove("has-media");
+    const placeholder = document.createElement("span");
+    placeholder.innerHTML = '<svg class="icon"><use href="#i-media"/></svg><small>Your selected media<br>will appear here</small>';
+    media.append(placeholder);
+    $("#preview-file-name").textContent = "No media selected";
+    $("#preview-file-meta").textContent = "Choose a preview to begin";
+  }
+  const selected = accountList.filter((account) => selectedAccountIds.has(account.id));
+  const targets = $("#composer-preview-destinations");
+  targets.replaceChildren();
+  $("#preview-target-count").textContent = selected.length ? `${selected.length} selected` : "No profiles yet";
+  if (selected.length) {
+    for (const account of selected) {
+      const chip = document.createElement("span");
+      chip.className = "preview-destination-chip";
+      chip.append(makeProfileAvatar(account, account.provider, "tiny"));
+      const name = document.createElement("span");
+      name.textContent = account.name;
+      chip.append(name);
+      targets.append(chip);
+    }
+  } else {
+    const placeholder = document.createElement("span");
+    placeholder.className = "preview-placeholder";
+    placeholder.textContent = "Your selected profiles will show here";
+    targets.append(placeholder);
+  }
+  const copy = $("#composer-preview-copy");
+  if (copy) {
+    const instagramSelected = selected.some((account) => account.provider === "instagram");
+    const youtubeSelected = selected.some((account) => account.provider === "youtube");
+    if (youtubeSelected && $("#youtube-publish-title").value.trim()) copy.textContent = $("#youtube-publish-title").value.trim();
+    else if (instagramSelected && $("#publish-caption").value.trim()) copy.textContent = $("#publish-caption").value.trim();
+    else copy.textContent = "Your post text preview will appear here.";
+  }
+}
+
+function renderComposer() {
+  selectedAccountIds = new Set([...selectedAccountIds].filter((id) => accountList.some((account) => account.id === id)));
+  if (selectedContentId && !contentItems.some((item) => item.id === selectedContentId)) selectedContentId = null;
+  renderComposerMedia();
+  renderComposerDestinations();
+  renderComposerDetails();
+  renderComposerPreview();
+  syncPublishButtons();
 }
 
 function syncPublishButtons() {
-  const instagramAccount = $("#publish-account").value;
-  const instagramContent = $("#instagram-content").value;
-  $("#publish-start").disabled = !authenticated || !instagramMediaConfigured || !instagramAccount || !instagramContent;
-  const youtubeAccount = $("#youtube-publish-account").value;
-  const youtubeContent = $("#youtube-content").value;
-  $("#youtube-publish-submit").disabled = !authenticated || !contentStorageConfigured || !youtubeAccount || !youtubeContent;
-  $("#content-file").disabled = !authenticated || !contentStorageConfigured;
-  $("#content-upload-submit").disabled = !authenticated || !contentStorageConfigured;
-}
-
-function renderContentSelectors() {
-  const configs = [
-    { selector: "#instagram-content", compatible: (item) => item.instagram_compatible,
-      locked: "Unlock to choose content", empty: "Upload a JPEG or MP4 in Content first" },
-    { selector: "#youtube-content", compatible: (item) => item.youtube_compatible,
-      locked: "Unlock to choose content", empty: "Upload a video in Content first" },
-  ];
-  for (const config of configs) {
-    const select = $(config.selector);
-    const selected = select.value;
-    const choices = contentItems.filter(config.compatible);
-    select.replaceChildren();
-    if (!authenticated) {
-      select.add(new Option(config.locked, ""));
-      select.disabled = true;
-    } else if (!contentStorageConfigured) {
-      select.add(new Option("Content storage isn't configured", ""));
-      select.disabled = true;
-    } else if (!choices.length) {
-      select.add(new Option(config.empty, ""));
-      select.disabled = true;
-    } else {
-      select.add(new Option("Choose saved content", ""));
-      for (const item of choices) select.add(new Option(item.filename, item.id));
-      select.disabled = false;
-      if (choices.some((item) => item.id === selected)) select.value = selected;
-    }
+  const selected = accountList.filter((account) => selectedAccountIds.has(account.id));
+  const hasResults = activeInstagramPosts.length > 0 || youtubeUploadResults.length > 0;
+  const item = contentItems.find((content) => content.id === selectedContentId);
+  const hasInstagram = selected.some((account) => account.provider === "instagram");
+  const hasYoutube = selected.some((account) => account.provider === "youtube");
+  const title = $("#youtube-publish-title").value.trim();
+  const ready = authenticated && contentStorageConfigured && Boolean(item) && selected.length > 0 &&
+    (!hasInstagram || instagramMediaConfigured) && (!hasYoutube || item?.youtube_compatible) &&
+    (!hasInstagram || item?.instagram_compatible) && (!hasYoutube || title.length > 0) && !publishing && !hasResults;
+  $("#publish-submit").disabled = !ready;
+  $("#publish-submit").querySelector("span").textContent = `Publish to ${selected.length} ${selected.length === 1 ? "profile" : "profiles"}`;
+  $("#session-button").disabled = publishing;
+  $("#content-file").disabled = !authenticated || !contentStorageConfigured || publishing;
+  $("#content-upload-submit").disabled = !authenticated || !contentStorageConfigured || publishing;
+  const status = $("#composer-status");
+  const statusTitle = $("#composer-status-title");
+  if (publishing) {
+    statusTitle.textContent = "Sending your post";
+    status.textContent = "Preparing each selected destination…";
+  } else if (!authenticated) {
+    statusTitle.textContent = "Unlock to get started";
+    status.textContent = "Unlock your workspace to choose saved media and profiles.";
+  } else if (!contentStorageConfigured) {
+    statusTitle.textContent = "Media storage needs setup";
+    status.textContent = "Configure content storage on the service before publishing.";
+  } else if (!item) {
+    statusTitle.textContent = "Choose your media";
+    status.textContent = "Select a photo or video preview from your library.";
+  } else if (!selected.length) {
+    statusTitle.textContent = "Choose your profiles";
+    status.textContent = "Select one or more Instagram or YouTube destinations.";
+  } else if (hasYoutube && !title) {
+    statusTitle.textContent = "Add a YouTube title";
+    status.textContent = "YouTube requires a title before this video can be uploaded.";
+  } else if (hasResults) {
+    statusTitle.textContent = "Review your post status";
+    status.textContent = "Follow Instagram readiness below. Start another post when you’re ready to create a new batch.";
+  } else {
+    statusTitle.textContent = "Ready to publish";
+    status.textContent = `This ${mediaKind(item).toLowerCase()} is ready for ${selected.length} selected ${selected.length === 1 ? "profile" : "profiles"}.`;
   }
 }
 
@@ -254,6 +624,7 @@ function renderContent() {
   list.replaceChildren();
   $("#content-count").textContent = authenticated ? String(contentItems.length) : "—";
   $("#content-nav-count").textContent = authenticated ? String(contentItems.length) : "—";
+  renderOverview();
   if (!authenticated) {
     $("#content-empty-action").hidden = false;
     $("#content-empty-title").textContent = "Unlock your workspace to view content.";
@@ -285,39 +656,41 @@ function renderContent() {
   }
   empty.hidden = true;
   list.hidden = false;
-  for (const item of contentItems) {
-    const card = document.createElement("article");
-    card.className = "media-card";
-    const preview = document.createElement("div");
-    preview.className = "media-preview";
-    if (item.content_type.startsWith("image/")) {
-      const image = document.createElement("img");
-      image.src = item.media_url;
-      image.alt = item.filename;
-      image.loading = "lazy";
-      preview.append(image);
-    } else {
-      const video = document.createElement("video");
-      video.src = item.media_url;
-      video.controls = true;
-      video.preload = "metadata";
-      video.playsInline = true;
-      preview.append(video);
-    }
-    const details = document.createElement("div");
-    details.className = "media-details";
-    const filename = document.createElement("strong");
-    filename.textContent = item.filename;
-    const metadata = document.createElement("small");
-    metadata.textContent = `${item.content_type} · ${formatBytes(item.size)}`;
-    const tags = document.createElement("div");
-    tags.className = "media-tags";
-    if (item.instagram_compatible) tags.append(makeMediaTag("Instagram", "instagram"));
-    if (item.youtube_compatible) tags.append(makeMediaTag("YouTube", "youtube"));
-    details.append(filename, metadata, tags);
-    card.append(preview, details);
-    list.append(card);
+  for (const item of contentItems) list.append(makeMediaCard(item));
+}
+
+function makeMediaCard(item, { compact = false } = {}) {
+  const card = document.createElement("article");
+  card.className = compact ? "media-card overview-media-card" : "media-card";
+  const preview = document.createElement("div");
+  preview.className = "media-preview";
+  if (item.content_type.startsWith("image/")) {
+    const image = document.createElement("img");
+    image.src = item.media_url;
+    image.alt = item.filename;
+    image.loading = "lazy";
+    preview.append(image);
+  } else {
+    const video = document.createElement("video");
+    video.src = item.media_url;
+    video.controls = !compact;
+    video.preload = "metadata";
+    video.playsInline = true;
+    preview.append(video);
   }
+  const details = document.createElement("div");
+  details.className = "media-details";
+  const filename = document.createElement("strong");
+  filename.textContent = item.filename;
+  const metadata = document.createElement("small");
+  metadata.textContent = `${item.content_type} · ${formatBytes(item.size)}`;
+  const tags = document.createElement("div");
+  tags.className = "media-tags";
+  if (item.instagram_compatible) tags.append(makeMediaTag("Instagram", "instagram"));
+  if (item.youtube_compatible) tags.append(makeMediaTag("YouTube", "youtube"));
+  details.append(filename, metadata, tags);
+  card.append(preview, details);
+  return card;
 }
 
 function makeMediaTag(label, platform) {
@@ -346,11 +719,11 @@ function renderAccounts() {
   $("#nav-count").textContent = String(accountList.length);
   $("#empty-state").hidden = accountList.length > 0;
   list.hidden = accountList.length === 0;
-  $("#empty-title").textContent = "Your channels will show up here.";
+  $("#empty-title").textContent = "No channels connected yet";
   $("#empty-description").textContent = authenticated
     ? "Connect Instagram or YouTube to start publishing."
     : "Unlock your workspace to view or connect an account.";
-  $("#empty-connect").textContent = authenticated ? "Choose a platform" : "Unlock workspace";
+  $("#empty-connect").textContent = authenticated ? "Connect a channel" : "Unlock workspace";
   for (const provider of Object.keys(names)) {
     const count = accountList.filter((account) => account.provider === provider).length;
     const badge = $(`#${provider}-state`);
@@ -381,16 +754,13 @@ function renderAccounts() {
     });
     list.append(row);
   }
-  renderInstagramPublisher();
-  renderYoutubePublisher();
-  renderContentSelectors();
-  syncPublishButtons();
-  updateConnectionSummary();
+  renderComposer();
+  renderWorkspaceFlow();
 }
 
 async function loadAccounts() {
   if (!authenticated) return;
-  const result = await api("/accounts");
+  const result = await api("/accounts?include_avatars=true");
   accountList = result.accounts;
   renderAccounts();
 }
@@ -399,15 +769,14 @@ async function loadContent() {
   if (!authenticated) {
     contentItems = [];
     renderContent();
-    renderContentSelectors();
-    syncPublishButtons();
+    renderComposer();
     return;
   }
   const result = await api("/content");
   contentItems = result.items;
   renderContent();
-  renderContentSelectors();
-  syncPublishButtons();
+  renderComposer();
+  renderWorkspaceFlow();
 }
 
 async function connect(provider, popupAlreadyOpen = false) {
@@ -452,12 +821,9 @@ document.querySelectorAll("[data-nav]").forEach((item) => {
     setPage(item.dataset.nav);
   });
 });
-document.querySelectorAll("[data-composer]").forEach((tab) => {
-  tab.addEventListener("click", () => setComposer(tab.dataset.composer));
-});
 window.addEventListener("popstate", () => {
   const page = window.location.hash.slice(1);
-  setPage(["connections", "content", "publish"].includes(page) ? page : "connections", { recordHistory: false });
+  setPage(["overview", "connections", "content", "publish"].includes(page) ? page : "overview", { recordHistory: false });
 });
 $("#empty-connect").addEventListener("click", () => {
   if (!authenticated) { showUnlock(); return; }
@@ -465,9 +831,6 @@ $("#empty-connect").addEventListener("click", () => {
 });
 $("#content-file").addEventListener("change", (event) => {
   $("#content-file-name").textContent = event.target.files[0]?.name || "No file selected";
-});
-$("#publish-caption").addEventListener("input", (event) => {
-  $("#caption-count").textContent = String(event.target.value.length);
 });
 document.querySelectorAll("[data-setup]").forEach((button) => {
   button.addEventListener("click", () => $("#setup-dialog").showModal());
@@ -585,9 +948,17 @@ $("#reload-content").addEventListener("click", async () => {
   finally { button.disabled = false; }
 });
 
-document.querySelectorAll("#instagram-content, #youtube-content, #publish-account, #youtube-publish-account").forEach((select) => {
-  select.addEventListener("change", syncPublishButtons);
+$("#publish-caption").addEventListener("input", (event) => {
+  $("#caption-count").textContent = String(event.target.value.length);
+  renderComposerPreview();
 });
+$("#youtube-publish-title").addEventListener("input", () => {
+  syncPublishButtons();
+  renderComposerPreview();
+});
+$("#youtube-publish-description").addEventListener("input", syncPublishButtons);
+$("#youtube-publish-privacy").addEventListener("change", syncPublishButtons);
+$("#youtube-made-for-kids").addEventListener("change", syncPublishButtons);
 
 $("#confirm-disconnect").addEventListener("click", async () => {
   if (!disconnecting) return;
@@ -605,109 +976,202 @@ $("#confirm-disconnect").addEventListener("click", async () => {
   } finally { button.disabled = false; }
 });
 
+function statusText(status) {
+  const labels = {
+    processing: "Processing on Instagram",
+    ready: "Ready to publish",
+    publishing: "Publishing",
+    published: "Published",
+    failed: "Instagram rejected this post",
+    expired: "Instagram container expired",
+    unknown: "Status needs checking",
+  };
+  return labels[status] || status || "Pending";
+}
+
+function renderPublishResults() {
+  const section = $("#publish-results-section");
+  const list = $("#publish-results");
+  list.replaceChildren();
+  const results = [...activeInstagramPosts, ...youtubeUploadResults];
+  section.hidden = results.length === 0;
+  const checkable = activeInstagramPosts.some((post) => ["processing", "unknown"].includes(post.status));
+  const ready = activeInstagramPosts.some((post) => post.status === "ready");
+  $("#instagram-check-all").hidden = !checkable;
+  $("#instagram-publish-ready").hidden = !ready;
+  for (const result of activeInstagramPosts) {
+    const row = document.createElement("article");
+    row.className = `publish-result-row ${result.status === "failed" ? "failed" : result.status}`;
+    row.append(makeProfileAvatar(result.account, "instagram", "result-avatar"));
+    const copy = document.createElement("span");
+    copy.className = "publish-result-copy";
+    const name = document.createElement("strong");
+    name.textContent = result.account.name;
+    const description = document.createElement("small");
+    description.textContent = result.error || statusText(result.status);
+    copy.append(name, description);
+    const badge = document.createElement("span");
+    badge.className = "result-status-badge";
+    badge.textContent = result.status === "ready" ? "Ready" : result.status === "published" ? "Published" : result.status === "failed" ? "Failed" : result.status === "expired" ? "Expired" : result.status === "unknown" ? "Check status" : "Processing";
+    row.append(copy, badge);
+    list.append(row);
+  }
+  for (const result of youtubeUploadResults) {
+    const row = document.createElement("article");
+    row.className = `publish-result-row ${result.error ? "failed" : "published"}`;
+    row.append(makeProfileAvatar(result.account, "youtube", "result-avatar"));
+    const copy = document.createElement("span");
+    copy.className = "publish-result-copy";
+    const name = document.createElement("strong");
+    name.textContent = result.account.name;
+    const description = document.createElement("small");
+    description.textContent = result.error || `Uploaded · ${result.privacyStatus || "private"}`;
+    copy.append(name, description);
+    if (result.url) {
+      const link = document.createElement("a");
+      link.className = "result-open-link";
+      link.href = result.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "Open video ↗";
+      row.append(copy, link);
+    } else {
+      row.append(copy);
+      const badge = document.createElement("span");
+      badge.className = "result-status-badge";
+      badge.textContent = "Failed";
+      row.append(badge);
+    }
+    list.append(row);
+  }
+}
+
+function setComposerProgress(title, message) {
+  $("#composer-status-title").textContent = title;
+  $("#composer-status").textContent = message;
+}
+
 $("#publish-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!authenticated) { showUnlock(); return; }
-  const accountId = $("#publish-account").value;
-  const content = contentItems.find((item) => item.id === $("#instagram-content").value);
-  if (!accountId || !content) { notice("Choose an Instagram account and content from your library first.", true); return; }
-  const button = $("#publish-start");
-  button.disabled = true;
-  $("#publish-check").hidden = true;
-  $("#publish-now").hidden = true;
-  try {
-    $("#publish-status").textContent = "Preparing Instagram post…";
-    activeInstagramPost = await api("/instagram/posts", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ account_id: accountId,
-        media_type: content.content_type === "image/jpeg" ? "IMAGE" : "REELS",
-        media_url: content.media_url, caption: $("#publish-caption").value }),
-    });
-    $("#publish-status").textContent = "Instagram is processing your " +
-      (content.content_type === "image/jpeg" ? "photo" : "Reel") + ". Check again in about a minute.";
-    $("#publish-check").hidden = false;
-  } catch (error) {
-    activeInstagramPost = null;
-    $("#publish-status").textContent = error.message;
-    notice(error.message, true);
-  } finally {
-    syncPublishButtons();
+  const item = contentItems.find((content) => content.id === selectedContentId);
+  const selected = accountList.filter((account) => selectedAccountIds.has(account.id));
+  const instagramAccounts = selected.filter((account) => account.provider === "instagram");
+  const youtubeAccounts = selected.filter((account) => account.provider === "youtube");
+  if (!item || !selected.length) { notice("Choose a media preview and at least one destination profile first.", true); return; }
+  if (youtubeAccounts.length && !$("#youtube-publish-title").value.trim()) { notice("YouTube needs a video title before upload.", true); return; }
+
+  activeInstagramPosts = [];
+  youtubeUploadResults = [];
+  publishing = true;
+  renderComposer();
+  renderPublishResults();
+  const mediaType = item.content_type === "image/jpeg" ? "IMAGE" : "REELS";
+  for (const account of instagramAccounts) {
+    setComposerProgress("Preparing Instagram", `Sending ${item.filename} to ${account.name}…`);
+    try {
+      const post = await api("/instagram/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: account.id, media_type: mediaType, media_url: item.media_url, caption: $("#publish-caption").value }),
+      });
+      activeInstagramPosts.push({ account, id: post.id, status: post.status || "processing" });
+    } catch (error) {
+      activeInstagramPosts.push({ account, status: "failed", error: error.message });
+    }
+    renderPublishResults();
   }
-});
-
-$("#publish-check").addEventListener("click", async () => {
-  if (!activeInstagramPost) return;
-  const button = $("#publish-check");
-  button.disabled = true;
-  try {
-    activeInstagramPost = await api("/instagram/posts/" + encodeURIComponent(activeInstagramPost.id));
-    $("#publish-status").textContent = "Instagram status: " + activeInstagramPost.status + ".";
-    $("#publish-now").hidden = activeInstagramPost.status !== "ready";
-    button.hidden = ["ready", "published", "failed", "expired"].includes(activeInstagramPost.status);
-    if (activeInstagramPost.status === "published") $("#publish-status").textContent = "Your post is published.";
-  } catch (error) {
-    notice(error.message, true);
-  } finally { button.disabled = false; }
-});
-
-$("#publish-now").addEventListener("click", async () => {
-  if (!activeInstagramPost) return;
-  const button = $("#publish-now");
-  button.disabled = true;
-  try {
-    activeInstagramPost = await api("/instagram/posts/" + encodeURIComponent(activeInstagramPost.id) + "/publish", { method: "POST" });
-    $("#publish-status").textContent = activeInstagramPost.status === "published"
-      ? "Your post is published." : "Instagram status: " + activeInstagramPost.status + ".";
-    button.hidden = true;
-    $("#publish-check").hidden = activeInstagramPost.status === "published";
-  } catch (error) {
-    notice(error.message, true);
-    $("#publish-status").textContent = error.message;
-  } finally { button.disabled = false; }
-});
-
-$("#youtube-publish-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (!authenticated) { showUnlock(); return; }
-  const accountId = $("#youtube-publish-account").value;
-  const contentId = $("#youtube-content").value;
-  const title = $("#youtube-publish-title").value.trim();
-  if (!accountId || !contentId || !title) {
-    notice("Choose a YouTube channel and saved video, then enter a title.", true);
-    return;
-  }
-  const button = $("#youtube-publish-submit");
-  button.disabled = true;
-  button.querySelector("span").textContent = "Uploading video…";
-  $("#youtube-publish-result").hidden = true;
-  try {
-    $("#youtube-publish-status").textContent = "Uploading saved content to YouTube. This can take a while.";
+  for (const account of youtubeAccounts) {
+    setComposerProgress("Uploading to YouTube", `Uploading ${item.filename} to ${account.name}. This can take a while…`);
     const form = new FormData();
-    form.append("account_id", accountId);
-    form.append("title", title);
+    form.append("account_id", account.id);
+    form.append("title", $("#youtube-publish-title").value.trim());
     form.append("description", $("#youtube-publish-description").value);
     form.append("privacy_status", $("#youtube-publish-privacy").value);
-    form.append("made_for_kids", "false");
-    form.append("content_id", contentId);
-    const uploaded = await api("/youtube/videos", { method: "POST", body: form });
-    $("#youtube-publish-status").textContent = "Video uploaded to YouTube as " + uploaded.privacy_status + ".";
-    const link = $("#youtube-publish-result");
-    link.href = uploaded.url;
-    link.hidden = false;
-  } catch (error) {
-    $("#youtube-publish-status").textContent = error.message;
-    notice(error.message, true);
-  } finally {
-    syncPublishButtons();
-    button.querySelector("span").textContent = "Upload video";
+    form.append("made_for_kids", String($("#youtube-made-for-kids").checked));
+    form.append("content_id", item.id);
+    try {
+      const uploaded = await api("/youtube/videos", { method: "POST", body: form });
+      youtubeUploadResults.push({ account, url: uploaded.url, privacyStatus: uploaded.privacy_status });
+    } catch (error) {
+      youtubeUploadResults.push({ account, error: error.message });
+    }
+    renderPublishResults();
+  }
+  publishing = false;
+  renderComposer();
+  renderPublishResults();
+  const successful = activeInstagramPosts.filter((post) => post.id).length + youtubeUploadResults.filter((result) => result.url).length;
+  const failures = activeInstagramPosts.filter((post) => post.status === "failed").length + youtubeUploadResults.filter((result) => result.error).length;
+  if (failures) setComposerProgress("Some destinations need attention", `${successful} of ${selected.length} destinations accepted the post. Review the results below.`);
+  else setComposerProgress("Post sent to every destination", instagramAccounts.length ? "Instagram is processing your post. Check readiness below, then publish when it’s ready." : "Your YouTube upload is complete. You can open each video below.");
+});
+
+$("#publish-new-post").addEventListener("click", () => {
+  selectedContentId = null;
+  selectedAccountIds.clear();
+  activeInstagramPosts = [];
+  youtubeUploadResults = [];
+  $("#publish-caption").value = "";
+  $("#caption-count").textContent = "0";
+  $("#youtube-publish-title").value = "";
+  $("#youtube-publish-description").value = "";
+  $("#youtube-publish-privacy").value = "private";
+  $("#youtube-made-for-kids").checked = false;
+  renderPublishResults();
+  renderComposer();
+});
+
+$("#instagram-check-all").addEventListener("click", async () => {
+  const button = $("#instagram-check-all");
+  button.disabled = true;
+  for (const post of activeInstagramPosts.filter((item) => item.id && ["processing", "unknown"].includes(item.status))) {
+    post.error = "Checking Instagram…";
+    renderPublishResults();
+    try {
+      const updated = await api(`/instagram/posts/${encodeURIComponent(post.id)}`);
+      post.status = updated.status;
+      post.error = null;
+    } catch (error) {
+      post.error = error.message;
+    }
+    renderPublishResults();
+  }
+  button.disabled = false;
+  if (activeInstagramPosts.some((post) => post.status === "ready")) setComposerProgress("Instagram is ready", "Review the destinations below and publish all ready posts when you’re ready.");
+});
+
+$("#instagram-publish-ready").addEventListener("click", async () => {
+  const button = $("#instagram-publish-ready");
+  button.disabled = true;
+  publishing = true;
+  renderComposer();
+  for (const post of activeInstagramPosts.filter((item) => item.id && item.status === "ready")) {
+    post.error = "Publishing…";
+    renderPublishResults();
+    try {
+      const updated = await api(`/instagram/posts/${encodeURIComponent(post.id)}/publish`, { method: "POST" });
+      post.status = updated.status;
+      post.error = null;
+    } catch (error) {
+      post.status = "unknown";
+      post.error = error.message;
+    }
+    renderPublishResults();
+  }
+  publishing = false;
+  renderComposer();
+  renderPublishResults();
+  button.disabled = false;
+  if (activeInstagramPosts.every((post) => post.status === "published" || post.status === "failed" || post.status === "expired")) {
+    setComposerProgress("Instagram publishing complete", "Your final post statuses are shown below.");
   }
 });
 
 async function initialize() {
   try {
     const initialPage = window.location.hash.slice(1);
-    setPage(["connections", "content", "publish"].includes(initialPage) ? initialPage : "connections", { recordHistory: false });
-    setComposer("instagram");
+    setPage(["overview", "connections", "content", "publish"].includes(initialPage) ? initialPage : "overview", { recordHistory: false });
     const state = await api("/session");
     authenticated = state.authenticated;
     instagramMediaConfigured = state.publishing?.instagram_media_configured === true;
