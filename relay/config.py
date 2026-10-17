@@ -81,7 +81,7 @@ class Settings:
 
     @classmethod
     def from_env(cls):
-        load_dotenv(ROOT / ".env")
+        load_dotenv(os.getenv("ENV_FILE", str(ROOT / ".env")))
         database_path = Path(os.getenv("DATABASE_PATH", "data/relay.sqlite3"))
         return cls(
             api_key=os.getenv("SERVICE_API_KEY", ""),

@@ -142,7 +142,7 @@ instances at one. Storage/API errors fail the request rather than silently losin
 Local runs continue to use local SQLite. Existing local connections are not migrated;
 connect accounts on the deployed site.
 
-Credentials load from Secret Manager `relay-config`, version 1, mounted at `/app/.env`.
+Credentials load from Secret Manager `relay-config`, version 1, mounted at `/secrets/relay/.env`.
 Unlock with your existing local `SERVICE_API_KEY`. No credentials, databases, or virtual
 environments are included in the public repository or container. The dedicated runtime
 identity can access only this app's secret and bucket through its assigned grants.
