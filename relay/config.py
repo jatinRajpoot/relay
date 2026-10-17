@@ -22,6 +22,7 @@ class Settings:
     database_path: Path = ROOT / "data/relay.sqlite3"
     instagram_api_version: str = "v25.0"
     max_upload_bytes: int = 2 * 1024**3
+    instagram_media_bucket: str = ""
     youtube_redirect_uri: str = ""
     instagram_redirect_uri: str = ""
 
@@ -94,6 +95,7 @@ class Settings:
             database_path=database_path if database_path.is_absolute() else ROOT / database_path,
             instagram_api_version=os.getenv("INSTAGRAM_API_VERSION", "v25.0"),
             max_upload_bytes=int(os.getenv("MAX_UPLOAD_BYTES", str(2 * 1024**3))),
+            instagram_media_bucket=os.getenv("INSTAGRAM_MEDIA_BUCKET", "").strip(),
             youtube_redirect_uri=os.getenv("YOUTUBE_REDIRECT_URI", ""),
             instagram_redirect_uri=os.getenv("INSTAGRAM_REDIRECT_URI", ""),
         )

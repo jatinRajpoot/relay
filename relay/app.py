@@ -4,7 +4,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Literal
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import httpx
 from cryptography.fernet import InvalidToken
@@ -12,6 +12,8 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Respon
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
+from google.api_core.exceptions import GoogleAPIError
+from google.auth.exceptions import GoogleAuthError
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 from relay.config import Settings
@@ -196,6 +198,10 @@ def create_app(settings: Settings | None = None, transport=None):
                 }
                 for provider in ("instagram", "youtube")
             },
+            "publishing": {
+                "instagram_media_configured": bool(settings.instagram_media_bucket),
+                "max_upload_bytes": settings.max_upload_bytes,
+            },
         }
 
     @app.post("/session", tags=["Workspace"])
@@ -329,6 +335,45 @@ def create_app(settings: Settings | None = None, transport=None):
         if not store.delete_account(account_id):
             raise HTTPException(404, "Connected account not found.")
         return Response(status_code=204)
+
+    @app.post("/instagram/media", dependencies=protected, tags=["Instagram"], status_code=201)
+    async def upload_instagram_media(file: Annotated[UploadFile, File()]):
+        """Upload JPEG or MP4 media to the configured public GCS bucket for Instagram to fetch."""
+        if not settings.instagram_media_bucket:
+            await file.close()
+            raise HTTPException(503, "Instagram media storage is not configured on this service.")
+        media_type = (file.content_type or "").lower()
+        extensions = {"image/jpeg": "jpg", "video/mp4": "mp4"}
+        if media_type not in extensions:
+            await file.close()
+            raise HTTPException(422, "Choose a JPEG image or an MP4 video for Instagram.")
+        if not file.size or file.size > settings.max_upload_bytes:
+            await file.close()
+            raise HTTPException(413, "Media is empty or exceeds MAX_UPLOAD_BYTES.")
+        object_name = f"instagram/{secrets.token_urlsafe(24)}.{extensions[media_type]}"
+        try:
+            from google.cloud import storage
+
+            blob = storage.Client().bucket(settings.instagram_media_bucket).blob(object_name)
+            blob.upload_from_file(
+                file.file,
+                rewind=True,
+                size=file.size,
+                content_type=media_type,
+                if_generation_match=0,
+            )
+        except (GoogleAPIError, GoogleAuthError, OSError, ValueError):
+            raise HTTPException(502, "Could not upload media to Google Cloud Storage.") from None
+        finally:
+            await file.close()
+        media_url = (
+            f"https://storage.googleapis.com/{quote(settings.instagram_media_bucket, safe='')}/"
+            f"{quote(object_name, safe='/')}"
+        )
+        return {
+            "media_url": media_url,
+            "media_type": "IMAGE" if media_type == "image/jpeg" else "REELS",
+        }
 
     @app.post("/instagram/posts", dependencies=protected, tags=["Instagram"], status_code=201)
     async def create_post(body: InstagramPost):

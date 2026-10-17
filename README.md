@@ -66,6 +66,8 @@ Access tokens refresh automatically **when used** near expiry (YouTube: two minu
 
 `POST /youtube/videos` accepts multipart form data. In Swagger, select your video file and supply the local YouTube account ID and title. It streams the spooled upload to a YouTube resumable session and returns the video ID/URL. Privacy defaults to `private`; choose `public` or `unlisted` explicitly.
 
+The frontend's **Upload to YouTube** form offers the same flow: choose a connected channel, select a video, add its title and optional description, and choose visibility. The response includes a link to the uploaded video.
+
 ```powershell
 $headers = @{ 'X-API-Key' = $env:SERVICE_API_KEY }
 # PowerShell 7. Load the key from .env into your shell privately first.
@@ -83,7 +85,9 @@ Uploads default to a 2 GiB service limit (`MAX_UPLOAD_BYTES`). Files spool to te
 
 ## Publish an Instagram image or Reel
 
-Meta fetches the media itself, so supply a publicly accessible HTTPS URL (JPEG image, or a supported video for Reels). A local file path or localhost URL will not work. This service does not host media.
+Meta fetches the media itself, so it needs a publicly accessible HTTPS URL (JPEG image, or MP4 video for Reels). The frontend can upload these files to a configured public-read Google Cloud Storage bucket and use its standard `https://storage.googleapis.com/...` URL. Configure `INSTAGRAM_MEDIA_BUCKET` and grant the service identity object creation access; the bucket needs public object viewer access so Meta can fetch the media. The API URL workflow below remains available for media hosted elsewhere.
+
+The frontend's **Publish to Instagram** form uploads media, creates the Instagram container, and lets you check readiness before publishing. The deployment limit is 20 MiB; local uploads use `MAX_UPLOAD_BYTES`.
 
 1. `POST /instagram/posts` creates an **unpublished** container and saves its job in SQLite:
 
@@ -141,6 +145,11 @@ This is intended for a small single-operator workspace; keep concurrency and max
 instances at one. Storage/API errors fail the request rather than silently losing writes.
 Local runs continue to use local SQLite. Existing local connections are not migrated;
 connect accounts on the deployed site.
+
+The public `aitryout-485605-relay-media` bucket stores Instagram media uploaded from the
+frontend. Objects are readable by anyone with the URL so Meta can retrieve them. The
+`relay-run` service identity can create objects; the frontend receives standard HTTPS
+`storage.googleapis.com` URLs. Local runs use ADC from the configured gcloud account.
 
 Credentials load from Secret Manager `relay-config`, version 1, mounted at `/secrets/relay/.env`.
 Unlock with your existing local `SERVICE_API_KEY`. No credentials, databases, or virtual
