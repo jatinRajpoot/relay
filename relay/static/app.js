@@ -17,6 +17,11 @@ let analyticsData = null;
 let analyticsLoading = false;
 let analyticsError = null;
 let analyticsRequestId = 0;
+let postHistory = [];
+let historyLoading = false;
+let historyLoaded = false;
+let historyError = null;
+let historyRequestId = 0;
 let analyticsDays = 30;
 let selectedContentId = null;
 let selectedAccountIds = new Set();
@@ -110,6 +115,11 @@ function renderSession() {
     analyticsLoading = false;
     analyticsError = null;
     analyticsRequestId += 1;
+    postHistory = [];
+    historyLoading = false;
+    historyLoaded = false;
+    historyError = null;
+    historyRequestId += 1;
     publishing = false;
     $("#accounts-list").replaceChildren();
     $("#accounts-list").hidden = true;
@@ -126,6 +136,7 @@ function renderSession() {
   renderComposer();
   renderWorkspaceFlow();
   renderAnalytics();
+  renderPostHistory();
 }
 
 function renderWorkspaceFlow() {
@@ -453,7 +464,7 @@ async function loadAnalytics() {
 }
 
 function setPage(page, { recordHistory = true } = {}) {
-  if (!["overview", "analytics", "connections", "content", "publish"].includes(page)) return;
+  if (!["overview", "analytics", "history", "connections", "content", "publish"].includes(page)) return;
   activePage = page;
   document.querySelectorAll("[data-page-view]").forEach((view) => {
     view.hidden = view.dataset.pageView !== page;
@@ -466,7 +477,7 @@ function setPage(page, { recordHistory = true } = {}) {
       else item.removeAttribute("aria-current");
     }
   });
-  const pageLabels = { overview: "Overview", analytics: "Analytics", connections: "Channels", content: "Media library", publish: "Create a post" };
+  const pageLabels = { overview: "Overview", analytics: "Analytics", history: "Post history", connections: "Channels", content: "Media library", publish: "Create a post" };
   $("#breadcrumb-label").textContent = pageLabels[page];
   document.title = `${pageLabels[page]} · Relay`;
   if (window.location.hash !== `#${page}`) {
@@ -475,6 +486,7 @@ function setPage(page, { recordHistory = true } = {}) {
   }
   window.scrollTo({ top: 0, behavior: "smooth" });
   if (page === "analytics") void loadAnalytics();
+  if (page === "history") void loadPostHistory();
 }
 
 function profileInitials(name) {
@@ -968,6 +980,152 @@ async function loadContent() {
   renderWorkspaceFlow();
 }
 
+function renderPostHistory() {
+  const locked = $("#history-locked");
+  if (!locked) return;
+  const loading = authenticated && (historyLoading || !historyLoaded);
+  const hasError = authenticated && !loading && Boolean(historyError);
+  const hasPosts = authenticated && !loading && !hasError && postHistory.length > 0;
+  locked.hidden = authenticated;
+  $("#history-loading").hidden = !loading;
+  const error = $("#history-error");
+  error.hidden = !hasError;
+  error.replaceChildren();
+  if (hasError) {
+    const message = document.createElement("span");
+    message.textContent = historyError;
+    const refresh = document.createElement("button");
+    refresh.className = "text-button";
+    refresh.type = "button";
+    refresh.textContent = "Try again";
+    refresh.addEventListener("click", () => void loadPostHistory());
+    error.append(message, refresh);
+  }
+  $("#history-empty").hidden = !authenticated || loading || hasError || hasPosts;
+  const list = $("#history-list");
+  list.replaceChildren();
+  list.hidden = !hasPosts;
+  $("#history-nav-count").textContent = authenticated && historyLoaded && !historyError
+    ? String(postHistory.length)
+    : "—";
+  for (const post of postHistory) {
+    const row = document.createElement("article");
+    row.className = "history-row";
+    row.setAttribute("role", "listitem");
+
+    const preview = document.createElement("div");
+    preview.className = `history-preview ${post.provider}`;
+    const youtubeThumbnail = post.provider === "youtube" && /^[A-Za-z0-9_-]{1,64}$/.test(post.platform_post_id)
+      ? `https://i.ytimg.com/vi/${post.platform_post_id}/hqdefault.jpg`
+      : null;
+    const imageUrl = youtubeThumbnail ||
+      (post.media_type === "IMAGE" || post.media_type?.startsWith("image/")
+        ? post.media_url
+        : null);
+    if (imageUrl?.startsWith("https://")) {
+      const image = document.createElement("img");
+      image.src = imageUrl;
+      image.alt = "";
+      preview.append(image);
+    } else {
+      const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      icon.classList.add("icon");
+      const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+      use.setAttribute("href", post.provider === "youtube" ? "#i-youtube" : "#i-instagram");
+      icon.append(use);
+      preview.append(icon);
+    }
+
+    const copy = document.createElement("div");
+    copy.className = "history-copy";
+    const platform = document.createElement("div");
+    platform.className = `history-platform ${post.provider}`;
+    const platformIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    platformIcon.classList.add("icon");
+    const platformUse = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    platformUse.setAttribute("href", post.provider === "youtube" ? "#i-youtube" : "#i-instagram");
+    platformIcon.append(platformUse);
+    const platformName = document.createElement("strong");
+    platformName.textContent = names[post.provider] || "Social channel";
+    const account = document.createElement("span");
+    account.textContent = post.account_name;
+    platform.append(platformIcon, platformName, account);
+
+    const title = document.createElement("h2");
+    title.textContent = post.title || post.caption || post.media_name ||
+      (post.provider === "youtube" ? "YouTube video" : "Instagram post");
+    copy.append(platform, title);
+    if (post.caption && post.title) {
+      const caption = document.createElement("p");
+      caption.textContent = post.caption;
+      copy.append(caption);
+    }
+    if (post.media_name && (post.title || post.caption)) {
+      const filename = document.createElement("small");
+      filename.textContent = post.media_name;
+      copy.append(filename);
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "history-meta";
+    const date = document.createElement("time");
+    const publishedAt = new Date(Number(post.published_at) * 1000);
+    date.dateTime = publishedAt.toISOString();
+    date.textContent = publishedAt.toLocaleString(undefined, {
+      month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+    });
+    meta.append(date);
+    if (post.visibility) {
+      const visibility = document.createElement("span");
+      visibility.className = "history-visibility";
+      visibility.textContent = post.visibility;
+      meta.append(visibility);
+    }
+    if (post.post_url?.startsWith("https://")) {
+      const link = document.createElement("a");
+      link.className = "history-open-link";
+      link.href = post.post_url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "Open video";
+      meta.append(link);
+    }
+    row.append(preview, copy, meta);
+    list.append(row);
+  }
+}
+
+async function loadPostHistory() {
+  if (!authenticated) {
+    historyRequestId += 1;
+    postHistory = [];
+    historyLoading = false;
+    historyLoaded = false;
+    historyError = null;
+    renderPostHistory();
+    return;
+  }
+  const requestId = ++historyRequestId;
+  historyLoading = true;
+  historyError = null;
+  renderPostHistory();
+  try {
+    const result = await api("/posts");
+    if (requestId !== historyRequestId || !authenticated) return;
+    postHistory = result.posts;
+    historyLoaded = true;
+  } catch (error) {
+    if (requestId !== historyRequestId || !authenticated) return;
+    historyError = error.message;
+    historyLoaded = authenticated;
+  } finally {
+    if (requestId === historyRequestId) {
+      historyLoading = false;
+      renderPostHistory();
+    }
+  }
+}
+
 async function connect(provider, popupAlreadyOpen = false) {
   if (providerIssues[provider]) {
     notice(providerIssues[provider], true);
@@ -1010,13 +1168,18 @@ document.querySelectorAll("[data-nav]").forEach((item) => {
     setPage(item.dataset.nav);
   });
 });
+$("#refresh-history").addEventListener("click", () => {
+  if (!authenticated) { showUnlock(); return; }
+  void loadPostHistory();
+});
+$("#history-unlock").addEventListener("click", () => showUnlock());
 $("#overview-primary-action").addEventListener("click", () => {
   if (!authenticated) { showUnlock(); return; }
   setPage("publish");
 });
 window.addEventListener("popstate", () => {
   const page = window.location.hash.slice(1);
-  setPage(["overview", "analytics", "connections", "content", "publish"].includes(page) ? page : "overview", { recordHistory: false });
+  setPage(["overview", "analytics", "history", "connections", "content", "publish"].includes(page) ? page : "overview", { recordHistory: false });
 });
 $("#analytics-range").addEventListener("change", (event) => {
   analyticsDays = Number(event.target.value);
@@ -1076,6 +1239,7 @@ $("#unlock-form").addEventListener("submit", async (event) => {
     await loadAccounts();
     await loadContent();
     if (activePage === "analytics") await loadAnalytics();
+    if (activePage === "history") await loadPostHistory();
     pendingProvider = null;
     if (provider) await connect(provider, true);
     else if (!accountList.length) notice("Workspace unlocked. Connect a channel to get started.");
@@ -1304,6 +1468,7 @@ $("#publish-form").addEventListener("submit", async (event) => {
   publishing = false;
   renderComposer();
   renderPublishResults();
+  if (youtubeUploadResults.some((result) => result.url)) await loadPostHistory();
   const successful = activeInstagramPosts.filter((post) => post.id).length + youtubeUploadResults.filter((result) => result.url).length;
   const failures = activeInstagramPosts.filter((post) => post.status === "failed").length + youtubeUploadResults.filter((result) => result.error).length;
   if (failures) setComposerProgress("Some destinations need attention", `${successful} of ${selected.length} destinations accepted the post. Review the results below.`);
@@ -1369,12 +1534,13 @@ $("#instagram-publish-ready").addEventListener("click", async () => {
   if (activeInstagramPosts.every((post) => post.status === "published" || post.status === "failed" || post.status === "expired")) {
     setComposerProgress("Instagram publishing complete", "Your final post statuses are shown below.");
   }
+  if (activeInstagramPosts.some((post) => post.status === "published")) await loadPostHistory();
 });
 
 async function initialize() {
   try {
     const initialPage = window.location.hash.slice(1);
-    setPage(["overview", "analytics", "connections", "content", "publish"].includes(initialPage) ? initialPage : "overview", { recordHistory: false });
+    setPage(["overview", "analytics", "history", "connections", "content", "publish"].includes(initialPage) ? initialPage : "overview", { recordHistory: false });
     const state = await api("/session");
     authenticated = state.authenticated;
     instagramMediaConfigured = state.publishing?.instagram_media_configured === true;
@@ -1406,6 +1572,7 @@ async function initialize() {
     await loadAccounts();
     await loadContent();
     if (activePage === "analytics") await loadAnalytics();
+    if (activePage === "history") await loadPostHistory();
     const params = new URLSearchParams(window.location.search);
     const connected = params.get("connected");
     const error = params.get("oauth_error");

@@ -26,6 +26,7 @@
     <symbol id="i-youtube" viewBox="0 0 24 24"><path d="M21 7c-.3-1.4-1-2-2.4-2.2a56 56 0 0 0-13.2 0C4 5 3.3 5.6 3 7a28 28 0 0 0 0 10c.3 1.4 1 2 2.4 2.2a56 56 0 0 0 13.2 0C20 19 20.7 18.4 21 17a28 28 0 0 0 0-10Z"/><path d="m10 8 6 4-6 4Z" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 2 2.8 7.2L22 12l-7.2 2.8L12 22l-2.8-7.2L2 12l7.2-2.8L12 2Z"/></symbol>
     <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 19V5m0 14h17M8 15l4-4 3 2 5-6"/><path d="M17 7h3v3"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5m4-1v5l3 2"/></symbol>
     <symbol id="i-media" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-5-5L5 20"/></symbol>
   </svg>
 
@@ -35,6 +36,7 @@
     <nav aria-label="Workspace navigation">
       <a class="nav-item active" href="#overview" data-nav="overview" aria-current="page"><svg class="icon"><use href="#i-home"/></svg>Overview</a>
       <a class="nav-item" href="#analytics" data-nav="analytics"><svg class="icon"><use href="#i-chart"/></svg>Analytics</a>
+      <a class="nav-item" href="#history" data-nav="history"><svg class="icon"><use href="#i-history"/></svg>History<span class="nav-count" id="history-nav-count">—</span></a>
       <a class="nav-item" href="#publish" data-nav="publish"><svg class="icon"><use href="#i-spark"/></svg>Create post</a>
       <a class="nav-item" href="#content" data-nav="content"><svg class="icon"><use href="#i-media"/></svg>Media library<span class="nav-count" id="content-nav-count">0</span></a>
       <a class="nav-item" href="#connections" data-nav="connections"><svg class="icon"><use href="#i-link"/></svg>Channels<span class="nav-count" id="nav-count">—</span></a>
@@ -92,6 +94,18 @@
        <div id="analytics-empty" class="analytics-message" hidden><span class="overview-empty-icon"><svg class="icon"><use href="#i-link"/></svg></span><div><strong>Connect a channel to see analytics.</strong><p>Once connected, performance data will appear here.</p></div><button class="button button-light" type="button" data-nav="connections">Connect a channel</button></div>
        <div id="analytics-list" class="analytics-grid" hidden></div>
        <p class="analytics-footnote">YouTube metrics come from YouTube Analytics. Instagram shows likes and comments on posts published in the selected period; reach and impressions are not included.</p>
+      </section>
+
+      <section class="page-view" id="history-view" data-page-view="history" hidden>
+       <section class="page-heading history-heading">
+        <div><div class="eyebrow"><span></span>Publishing activity</div><h1>Post history</h1><p>Published posts from your Instagram and YouTube channels.</p></div>
+        <button class="button button-light" id="refresh-history" type="button"><svg class="icon"><use href="#i-refresh"/></svg>Refresh</button>
+       </section>
+       <div id="history-locked" class="analytics-message"><span class="overview-empty-icon"><svg class="icon"><use href="#i-lock"/></svg></span><div><strong>Unlock to view your post history.</strong><p>Your publishing activity stays private in your workspace.</p></div><button class="button button-primary" id="history-unlock" type="button">Unlock workspace</button></div>
+       <div id="history-loading" class="analytics-message" role="status" hidden><span class="analytics-spinner" aria-hidden="true"></span><div><strong>Loading post history…</strong><p>Gathering the latest posts published through Relay.</p></div></div>
+       <div id="history-error" class="analytics-message analytics-error" role="alert" hidden></div>
+       <div id="history-empty" class="empty-state history-empty" hidden><div class="empty-icon"><svg class="icon"><use href="#i-history"/></svg></div><h3>Nothing published yet</h3><p>Your successful Instagram posts and YouTube uploads will appear here.</p><button class="button button-primary" type="button" data-nav="publish">Create a post</button></div>
+       <div id="history-list" class="history-list" role="list" hidden></div>
       </section>
 
       <section class="page-view" id="connections-view" data-page-view="connections" hidden>

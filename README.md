@@ -13,7 +13,7 @@ python -m venv .venv
 
 Open <http://localhost:8000> for the Connections frontend. Click **Connect Instagram** or **Connect YouTube**, unlock once with `SERVICE_API_KEY` from `.env`, and sign in with the provider. The frontend uses an encrypted HttpOnly browser session lasting eight hours; the key and provider tokens are never placed in browser storage. **Lock workspace** signs this browser out without disconnecting your accounts.
 
-The page shows your connected accounts, expiration status, reconnect/disconnect actions, and a setup guide with copyable callback URLs. Connect opens a centered 520×720 sign-in popup before waiting for any network requests, including when you first unlock the workspace. The dashboard stays open. Google explicitly asks you to choose an account and grant consent. Browsers may display a separate tab instead of a small window; allow popups for your workspace. Provider pages run in the sign-in window, rather than an embedded iframe.
+The page shows your connected accounts, expiration status, reconnect/disconnect actions, a setup guide with copyable callback URLs, and a post history for Instagram and YouTube publishing completed through Relay. Connect opens a centered 520×720 sign-in popup before waiting for any network requests, including when you first unlock the workspace. The dashboard stays open. Google explicitly asks you to choose an account and grant consent. Browsers may display a separate tab instead of a small window; allow popups for your workspace. Provider pages run in the sign-in window, rather than an embedded iframe.
 
 After consent or cancellation, the popup reports its result to the dashboard using `postMessage`. The dashboard validates the exact origin, window reference and provider before accepting the result, closes the popup and refreshes the account list. Only a result status crosses this channel; tokens remain on the server. If a browser severs the opener connection, the completion page offers a manual return to the workspace; refresh the account list there.
 
@@ -93,6 +93,8 @@ Meta fetches the media itself, so it needs a publicly accessible HTTPS URL (JPEG
 
 The frontend's **Content** section uploads JPEG photos and video files to the media library. In **Publish**, select a saved item for Instagram or YouTube. Instagram media needs a publicly accessible HTTPS URL, so the configured bucket must grant public object viewer access. YouTube videos are read from the same bucket and streamed into YouTube's resumable upload. The deployment limit is 20 MiB; local uploads use `MAX_UPLOAD_BYTES`.
 
+Open **History** to review the latest 200 posts published through Relay. Instagram posts are added after publishing completes; YouTube uploads are added after the upload succeeds. Previously published Instagram jobs are included when the service upgrades its local database. Disconnecting an account removes its local history records along with its saved connection.
+
 1. `POST /instagram/posts` creates an **unpublished** container and saves its job in SQLite:
 
    ```json
@@ -121,6 +123,7 @@ The job atomically claims publication to prevent simultaneous requests from publ
 | POST | `/accounts/{id}/refresh` | Refresh stored authorization |
 | DELETE | `/accounts/{id}` | Remove local connection |
 | GET | `/analytics?days=30` | Fetch provider metrics for 7, 30, or 90 days |
+| GET | `/posts` | List the latest 200 posts published through Relay |
 | GET | `/content` | List saved media library items |
 | POST | `/content` | Upload JPEG or video content to the media library |
 | POST | `/youtube/videos` | Multipart video upload or saved content selection |

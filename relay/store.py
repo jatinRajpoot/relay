@@ -54,7 +54,25 @@ class Store:
                     container_id TEXT NOT NULL UNIQUE,
                     media_id TEXT,
                     status TEXT NOT NULL DEFAULT 'processing',
-                    created_at INTEGER NOT NULL
+                    created_at INTEGER NOT NULL,
+                    media_type TEXT,
+                    media_url TEXT,
+                    caption TEXT NOT NULL DEFAULT ''
+                );
+                CREATE TABLE IF NOT EXISTS post_history (
+                    id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL CHECK(provider IN ('youtube', 'instagram')),
+                    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                    platform_post_id TEXT NOT NULL,
+                    title TEXT,
+                    caption TEXT NOT NULL DEFAULT '',
+                    media_name TEXT,
+                    media_type TEXT,
+                    media_url TEXT,
+                    post_url TEXT,
+                    visibility TEXT,
+                    published_at INTEGER NOT NULL,
+                    UNIQUE(provider, platform_post_id)
                 );
                 CREATE TABLE IF NOT EXISTS content_items (
                     id TEXT PRIMARY KEY,
@@ -76,6 +94,29 @@ class Store:
             account_columns = {row[1] for row in db.execute("PRAGMA table_info(accounts)")}
             if "avatar_url" not in account_columns:
                 db.execute("ALTER TABLE accounts ADD COLUMN avatar_url TEXT")
+            post_columns = {row[1] for row in db.execute("PRAGMA table_info(instagram_posts)")}
+            for column, declaration in (
+                ("media_type", "TEXT"),
+                ("media_url", "TEXT"),
+                ("caption", "TEXT NOT NULL DEFAULT ''"),
+            ):
+                if column not in post_columns:
+                    db.execute(f"ALTER TABLE instagram_posts ADD COLUMN {column} {declaration}")
+            db.execute(
+                """
+                INSERT INTO post_history(
+                    id, provider, account_id, platform_post_id, published_at
+                )
+                SELECT 'instagram-' || id, 'instagram', account_id, media_id, created_at
+                FROM instagram_posts
+                WHERE status='published' AND media_id IS NOT NULL
+                ON CONFLICT(provider, platform_post_id) DO NOTHING
+                """
+            )
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS post_history_published_at "
+                "ON post_history(published_at DESC, id DESC)"
+            )
 
     @contextmanager
     def connection(self):
@@ -256,15 +297,16 @@ class Store:
             )
         } | {"has_refresh_token": bool(account["refresh_token"])}
 
-    def create_post(self, account_id, container_id):
+    def create_post(self, account_id, container_id, media_type=None, media_url=None, caption=""):
         post_id = secrets.token_hex(16)
         with self.connection() as db:
             db.execute(
                 """
-                INSERT INTO instagram_posts(id, account_id, container_id, created_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO instagram_posts(
+                    id, account_id, container_id, created_at, media_type, media_url, caption
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-                (post_id, account_id, container_id, int(time.time())),
+                (post_id, account_id, container_id, int(time.time()), media_type, media_url, caption),
             )
         return self.get_post(post_id)
 
@@ -281,7 +323,100 @@ class Store:
             """,
                 (status, media_id, post_id),
             )
+            if status == "published":
+                post = db.execute(
+                    "SELECT * FROM instagram_posts WHERE id=?", (post_id,)
+                ).fetchone()
+                if post:
+                    self._save_instagram_history(db, post)
         return self.get_post(post_id)
+
+    def sync_post_status(self, post_id, previous_status, status):
+        with self.connection() as db:
+            updated = db.execute(
+                "UPDATE instagram_posts SET status=? WHERE id=? AND status=?",
+                (status, post_id, previous_status),
+            ).rowcount
+            if updated and status == "published":
+                post = db.execute(
+                    "SELECT * FROM instagram_posts WHERE id=?", (post_id,)
+                ).fetchone()
+                if post:
+                    self._save_instagram_history(db, post)
+        return self.get_post(post_id)
+
+    @staticmethod
+    def _save_instagram_history(db, post):
+        db.execute(
+            """
+            INSERT INTO post_history(
+                id, provider, account_id, platform_post_id, caption, media_type,
+                media_url, published_at
+            ) VALUES (?, 'instagram', ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(provider, platform_post_id) DO NOTHING
+            """,
+            (
+                f"instagram-{post['id']}",
+                post["account_id"],
+                post["media_id"] or post["container_id"],
+                post["caption"] or "",
+                post["media_type"],
+                post["media_url"],
+                int(time.time()),
+            ),
+        )
+
+    def save_youtube_history(
+        self,
+        account_id,
+        video_id,
+        title,
+        description,
+        media_name,
+        media_type,
+        media_url,
+        post_url,
+        visibility,
+    ):
+        with self.connection() as db:
+            db.execute(
+                """
+                INSERT INTO post_history(
+                    id, provider, account_id, platform_post_id, title, caption,
+                    media_name, media_type, media_url, post_url, visibility, published_at
+                ) VALUES (?, 'youtube', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(provider, platform_post_id) DO NOTHING
+                """,
+                (
+                    f"youtube-{video_id}",
+                    account_id,
+                    video_id,
+                    title,
+                    description,
+                    media_name,
+                    media_type,
+                    media_url,
+                    post_url,
+                    visibility,
+                    int(time.time()),
+                ),
+            )
+
+    def list_post_history(self, limit=200):
+        with self.connection() as db:
+            return [
+                dict(row)
+                for row in db.execute(
+                    """
+                    SELECT history.*, accounts.name AS account_name
+                    FROM post_history AS history
+                    JOIN accounts ON accounts.id=history.account_id
+                    ORDER BY history.published_at DESC, history.id DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                )
+            ]
 
     def claim_post(self, post_id):
         with self.connection() as db:
