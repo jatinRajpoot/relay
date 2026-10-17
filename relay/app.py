@@ -155,13 +155,15 @@ def create_app(settings: Settings | None = None, transport=None):
         return post
 
     async def sync_post(post):
-        if post["status"] in {"published", "failed", "expired", "publishing"}:
+        if post["status"] in {"published", "failed", "expired"}:
             return post
         account = await valid_account(post["account_id"], "instagram")
         remote = await app.state.providers.instagram_status(
             post["container_id"],
             store.decrypt(account["access_token"]),
         )
+        if post["status"] == "publishing" and remote != "PUBLISHED":
+            return post
         status = {
             "FINISHED": "ready",
             "IN_PROGRESS": "processing",
