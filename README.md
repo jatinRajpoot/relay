@@ -93,6 +93,8 @@ Meta fetches the media itself, so it needs a publicly accessible HTTPS URL (JPEG
 
 The frontend's **Content** section uploads JPEG photos and video files to the media library. In **Publish**, select a saved item for Instagram or YouTube. Instagram media needs a publicly accessible HTTPS URL, so the configured bucket must grant public object viewer access. YouTube videos are read from the same bucket and streamed into YouTube's resumable upload. The deployment limit is 20 MiB; local uploads use `MAX_UPLOAD_BYTES`.
 
+Instagram first sends the media to Meta for processing; that step does not publish the post. The **Publishing status** area shows each account as processing, ready but not live, publishing, or confirmed published. Processing statuses refresh automatically about once a minute. When a post is ready, select **Publish ready posts**; the row changes to **Published** only after Relay receives confirmation.
+
 Open **History** to review the latest 200 posts published through Relay. Instagram posts are added after publishing completes; YouTube uploads are added after the upload succeeds. Previously published Instagram jobs are included when the service upgrades its local database. Disconnecting an account removes its local history records along with its saved connection.
 
 1. `POST /instagram/posts` creates an **unpublished** container and saves its job in SQLite:
@@ -110,7 +112,7 @@ Open **History** to review the latest 200 posts published through Relay. Instagr
 2. Use the returned job `id` with `GET /instagram/posts/{id}`. Poll at most once per minute until `status` is `ready`; videos can take several minutes. `failed` / `expired` are terminal states.
 3. `POST /instagram/posts/{id}/publish` checks readiness and publishes immediately, returning the saved `media_id`. Calling it again after success returns the saved result without publishing again.
 
-The job atomically claims publication to prevent simultaneous requests from publishing twice. If publication fails ambiguously, its status becomes `unknown`: poll status to reconcile whether Meta published it and check Instagram before taking further action. The service blocks automatic retries of unknown jobs. A process crash during a publish may leave `publishing` and needs manual reconciliation. Images and Reels are supported; carousels and Stories are not implemented.
+The job atomically claims publication to prevent simultaneous requests from publishing twice. If publication fails ambiguously, its status becomes `unknown`: poll status to reconcile whether Meta published it and check Instagram before taking further action. The service blocks automatic retries of unknown jobs. A process crash during a publish may leave `publishing`; a later status check asks Meta to confirm it, and Relay records the post if Meta reports it as published. Images and Reels are supported; carousels and Stories are not implemented.
 
 ## API reference
 
