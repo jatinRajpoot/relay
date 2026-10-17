@@ -1,0 +1,270 @@
+import hashlib
+import os
+import secrets
+import sqlite3
+import threading
+import time
+from contextlib import contextmanager
+from pathlib import Path
+
+from cryptography.fernet import Fernet
+
+
+def digest(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+class Store:
+    def __init__(self, path: Path, encryption_key: str):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.path = path
+        self.cipher = Fernet(encryption_key.encode())
+        self._lock = threading.RLock()
+        self._blob = None
+        if bucket := os.getenv("DATABASE_BUCKET"):
+            from google.cloud import storage
+
+            self._blob = storage.Client().bucket(bucket).blob("relay.sqlite3")
+        with self.connection() as db:
+            db.execute("PRAGMA journal_mode=DELETE" if self._blob else "PRAGMA journal_mode=WAL")
+            db.executescript("""
+                CREATE TABLE IF NOT EXISTS oauth_states (
+                    state_hash TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    browser_hash TEXT NOT NULL,
+                    verifier TEXT,
+                    expires_at INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS accounts (
+                    id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL CHECK(provider IN ('youtube', 'instagram')),
+                    external_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    access_token TEXT NOT NULL,
+                    refresh_token TEXT,
+                    expires_at INTEGER NOT NULL,
+                    scopes TEXT NOT NULL,
+                    token_updated_at INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    UNIQUE(provider, external_id)
+                );
+                CREATE TABLE IF NOT EXISTS instagram_posts (
+                    id TEXT PRIMARY KEY,
+                    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                    container_id TEXT NOT NULL UNIQUE,
+                    media_id TEXT,
+                    status TEXT NOT NULL DEFAULT 'processing',
+                    created_at INTEGER NOT NULL
+                );
+            """)
+            columns = {row[1] for row in db.execute("PRAGMA table_info(oauth_states)")}
+            if "return_to_ui" not in columns:
+                db.execute(
+                    "ALTER TABLE oauth_states ADD COLUMN return_to_ui INTEGER NOT NULL DEFAULT 0"
+                )
+            if "popup" not in columns:
+                db.execute("ALTER TABLE oauth_states ADD COLUMN popup INTEGER NOT NULL DEFAULT 0")
+
+    @contextmanager
+    def connection(self):
+        with self._lock, self._connection() as db:
+            yield db
+
+    @contextmanager
+    def _connection(self):
+        generation = 0
+        before = b""
+        if self._blob is not None:
+            from google.api_core.exceptions import NotFound
+
+            try:
+                self._blob.reload()
+                generation = int(self._blob.generation)
+                before = self._blob.download_as_bytes(if_generation_match=generation)
+            except NotFound:
+                pass
+            self.path.write_bytes(before)
+        db = sqlite3.connect(self.path, timeout=10)
+        db.row_factory = sqlite3.Row
+        db.execute("PRAGMA foreign_keys=ON")
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
+        if self._blob is not None:
+            after = self.path.read_bytes()
+            if after != before:
+                # A stale revision must fail rather than overwrite a newer transaction.
+                self._blob.upload_from_string(
+                    after, content_type="application/octet-stream",
+                    if_generation_match=generation,
+                )
+
+    def encrypt(self, value: str | None) -> str | None:
+        return self.cipher.encrypt(value.encode()).decode() if value else None
+
+    def decrypt(self, value: str | None) -> str | None:
+        return self.cipher.decrypt(value.encode()).decode() if value else None
+
+    def create_state(
+        self,
+        provider: str,
+        browser: str,
+        verifier: str | None,
+        return_to_ui: bool = False,
+        popup: bool = False,
+    ) -> str:
+        state = secrets.token_urlsafe(32)
+        now = int(time.time())
+        with self.connection() as db:
+            db.execute("DELETE FROM oauth_states WHERE expires_at <= ?", (now,))
+            db.execute(
+                "INSERT INTO oauth_states(state_hash, provider, browser_hash, verifier, expires_at, return_to_ui, popup) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    digest(state),
+                    provider,
+                    digest(browser),
+                    self.encrypt(verifier),
+                    now + 600,
+                    int(return_to_ui),
+                    int(popup),
+                ),
+            )
+        return state
+
+    def consume_state(self, state: str, provider: str, browser: str):
+        with self.connection() as db:
+            row = db.execute(
+                """
+                DELETE FROM oauth_states
+                WHERE state_hash=? AND provider=? AND browser_hash=? AND expires_at>?
+                RETURNING verifier, return_to_ui, popup
+            """,
+                (digest(state), provider, digest(browser), int(time.time())),
+            ).fetchone()
+        return (
+            {
+                "verifier": self.decrypt(row["verifier"]),
+                "return_to_ui": bool(row["return_to_ui"]),
+                "popup": bool(row["popup"]),
+            }
+            if row
+            else None
+        )
+
+    def save_account(self, provider, external_id, name, tokens, scopes):
+        now = int(time.time())
+        with self.connection() as db:
+            db.execute(
+                """
+                INSERT INTO accounts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(provider, external_id) DO UPDATE SET
+                    name=excluded.name, access_token=excluded.access_token,
+                    refresh_token=COALESCE(excluded.refresh_token, accounts.refresh_token),
+                    expires_at=excluded.expires_at, scopes=excluded.scopes,
+                    token_updated_at=excluded.token_updated_at
+            """,
+                (
+                    secrets.token_hex(16),
+                    provider,
+                    str(external_id),
+                    name,
+                    self.encrypt(tokens["access_token"]),
+                    self.encrypt(tokens.get("refresh_token")),
+                    now + int(tokens["expires_in"]),
+                    scopes,
+                    now,
+                    now,
+                ),
+            )
+            row = db.execute(
+                "SELECT * FROM accounts WHERE provider=? AND external_id=?",
+                (provider, str(external_id)),
+            ).fetchone()
+        return dict(row)
+
+    def get_account(self, account_id):
+        with self.connection() as db:
+            row = db.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone()
+        return dict(row) if row else None
+
+    def list_accounts(self):
+        with self.connection() as db:
+            return [dict(row) for row in db.execute("SELECT * FROM accounts ORDER BY created_at")]
+
+    def update_tokens(self, account_id, tokens):
+        now = int(time.time())
+        with self.connection() as db:
+            db.execute(
+                """
+                UPDATE accounts SET access_token=?, refresh_token=COALESCE(?, refresh_token),
+                    expires_at=?, token_updated_at=? WHERE id=?
+            """,
+                (
+                    self.encrypt(tokens["access_token"]),
+                    self.encrypt(tokens.get("refresh_token")),
+                    now + int(tokens["expires_in"]),
+                    now,
+                    account_id,
+                ),
+            )
+        return self.get_account(account_id)
+
+    def delete_account(self, account_id):
+        with self.connection() as db:
+            return db.execute("DELETE FROM accounts WHERE id=?", (account_id,)).rowcount > 0
+
+    @staticmethod
+    def public_account(account):
+        return {
+            key: account[key]
+            for key in (
+                "id",
+                "provider",
+                "external_id",
+                "name",
+                "expires_at",
+                "scopes",
+                "created_at",
+            )
+        } | {"has_refresh_token": bool(account["refresh_token"])}
+
+    def create_post(self, account_id, container_id):
+        post_id = secrets.token_hex(16)
+        with self.connection() as db:
+            db.execute(
+                """
+                INSERT INTO instagram_posts(id, account_id, container_id, created_at)
+                VALUES (?, ?, ?, ?)
+            """,
+                (post_id, account_id, container_id, int(time.time())),
+            )
+        return self.get_post(post_id)
+
+    def get_post(self, post_id):
+        with self.connection() as db:
+            row = db.execute("SELECT * FROM instagram_posts WHERE id=?", (post_id,)).fetchone()
+        return dict(row) if row else None
+
+    def update_post(self, post_id, status, media_id=None):
+        with self.connection() as db:
+            db.execute(
+                """
+                UPDATE instagram_posts SET status=?, media_id=COALESCE(?, media_id) WHERE id=?
+            """,
+                (status, media_id, post_id),
+            )
+        return self.get_post(post_id)
+
+    def claim_post(self, post_id):
+        with self.connection() as db:
+            return (
+                db.execute(
+                    """
+                UPDATE instagram_posts SET status='publishing' WHERE id=? AND status='ready'
+            """,
+                    (post_id,),
+                ).rowcount
+                == 1
+            )
