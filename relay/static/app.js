@@ -165,7 +165,7 @@ function renderWorkspaceFlow() {
   $("#workflow-status").textContent = status;
   $("#workflow-description").textContent = description;
   const states = {
-    channels: hasChannel ? "complete" : "current",
+    channels: !authenticated ? "upcoming" : hasChannel ? "complete" : "current",
     media: hasChannel ? (hasMedia ? "complete" : "current") : "upcoming",
     publish: hasMedia ? "current" : "upcoming",
   };
@@ -180,22 +180,12 @@ function renderWorkspaceFlow() {
 }
 
 function renderOverview() {
-  const channelCount = $("#overview-channel-count");
-  if (!channelCount) return;
   const primaryAction = $("#overview-primary-action");
+  if (!primaryAction) return;
   primaryAction.querySelector("span").textContent = authenticated ? "Create a post" : "Unlock workspace";
   primaryAction.querySelector("use").setAttribute("href", authenticated ? "#i-plus" : "#i-lock");
-  $("#overview-channel-count").textContent = authenticated ? String(accountList.length) : "—";
-  $("#overview-channel-detail").textContent = !authenticated
-    ? "Unlock to view your accounts"
-    : accountList.length ? `${accountList.length} publishing ${accountList.length === 1 ? "destination" : "destinations"}` : "Connect Instagram or YouTube";
-  $("#overview-media-count").textContent = authenticated ? String(contentItems.length) : "—";
-  $("#overview-media-detail").textContent = !authenticated
-    ? "Unlock to view your library"
-    : contentItems.length ? "Photos and videos ready to use" : "Upload a photo or video to begin";
-
-  let readiness = "Unlock to begin";
-  let readinessDetail = "See what's ready to share";
+  let readiness = "Your workspace awaits";
+  let readinessDetail = "Unlock once to see your channels and media";
   if (authenticated && !accountList.length) {
     readiness = "Set up channels";
     readinessDetail = "Connect Instagram or YouTube";
