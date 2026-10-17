@@ -173,14 +173,7 @@ def create_app(settings: Settings | None = None, transport=None):
         if post["status"] == "unknown" and status in {"ready", "processing"}:
             return post
         # Do not overwrite a concurrent publish claim with a stale GET result.
-        with store.connection() as db:
-            db.execute(
-                """
-                UPDATE instagram_posts SET status=? WHERE id=? AND status=?
-            """,
-                (status, post["id"], post["status"]),
-            )
-        return store.get_post(post["id"])
+        return store.sync_post_status(post["id"], post["status"], status)
 
     @app.get("/health", tags=["Service"])
     async def health():
@@ -396,6 +389,12 @@ def create_app(settings: Settings | None = None, transport=None):
             results.append(item)
         return {"period": period, "accounts": results}
 
+    @app.get("/posts", dependencies=protected, tags=["Publishing"])
+    async def post_history():
+        """List the latest posts published through Relay across connected channels."""
+        posts = store.list_post_history()
+        return {"posts": posts, "count": len(posts)}
+
     @app.post("/accounts/{account_id}/refresh", dependencies=protected, tags=["Accounts"])
     async def refresh(account_id: str):
         """Refresh stored tokens. Instagram requires a valid token at least 24 hours old."""
@@ -512,7 +511,13 @@ def create_app(settings: Settings | None = None, transport=None):
             str(body.media_url),
             body.caption,
         )
-        return store.create_post(account["id"], container_id)
+        return store.create_post(
+            account["id"],
+            container_id,
+            body.media_type,
+            str(body.media_url),
+            body.caption,
+        )
 
     @app.get("/instagram/posts/{post_id}", dependencies=protected, tags=["Instagram"])
     async def post_status(post_id: str):
@@ -558,6 +563,7 @@ def create_app(settings: Settings | None = None, transport=None):
         if not title.strip() or "<" in title or ">" in title:
             raise HTTPException(422, "Title must contain text and cannot include < or >.")
         temporary_file = None
+        content_item = None
         if content_id:
             if file:
                 await file.close()
@@ -565,6 +571,7 @@ def create_app(settings: Settings | None = None, transport=None):
             item = store.get_content_item(content_id)
             if not item:
                 raise HTTPException(404, "Content item not found. Refresh your content library.")
+            content_item = item
             if not (
                 item["content_type"].startswith("video/")
                 or item["content_type"] == "application/octet-stream"
@@ -612,11 +619,23 @@ def create_app(settings: Settings | None = None, transport=None):
                     "selfDeclaredMadeForKids": made_for_kids,
                 },
             }
-            return await app.state.providers.upload_youtube(
+            uploaded = await app.state.providers.upload_youtube(
                 store.decrypt(account["access_token"]),
                 file,
                 metadata,
             )
+            store.save_youtube_history(
+                account["id"],
+                uploaded["id"],
+                title.strip(),
+                description,
+                file.filename or "",
+                mime,
+                content_item["media_url"] if content_item else None,
+                uploaded["url"],
+                uploaded.get("privacy_status") or privacy_status,
+            )
+            return uploaded
         finally:
             await file.close()
 
