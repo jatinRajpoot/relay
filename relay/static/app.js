@@ -166,6 +166,9 @@ function renderWorkspaceFlow() {
 function renderOverview() {
   const channelCount = $("#overview-channel-count");
   if (!channelCount) return;
+  const primaryAction = $("#overview-primary-action");
+  primaryAction.querySelector("span").textContent = authenticated ? "Create a post" : "Unlock workspace";
+  primaryAction.querySelector("use").setAttribute("href", authenticated ? "#i-plus" : "#i-lock");
   $("#overview-channel-count").textContent = authenticated ? String(accountList.length) : "—";
   $("#overview-channel-detail").textContent = !authenticated
     ? "Unlock to view your accounts"
@@ -1007,6 +1010,10 @@ document.querySelectorAll("[data-nav]").forEach((item) => {
     setPage(item.dataset.nav);
   });
 });
+$("#overview-primary-action").addEventListener("click", () => {
+  if (!authenticated) { showUnlock(); return; }
+  setPage("publish");
+});
 window.addEventListener("popstate", () => {
   const page = window.location.hash.slice(1);
   setPage(["overview", "analytics", "connections", "content", "publish"].includes(page) ? page : "overview", { recordHistory: false });
@@ -1071,7 +1078,10 @@ $("#unlock-form").addEventListener("submit", async (event) => {
     if (activePage === "analytics") await loadAnalytics();
     pendingProvider = null;
     if (provider) await connect(provider, true);
-    else notice("Workspace unlocked. You're ready to connect.");
+    else if (!accountList.length) notice("Workspace unlocked. Connect a channel to get started.");
+    else if (!contentStorageConfigured) notice("Workspace unlocked. Media storage needs setup before you can publish.");
+    else if (!contentItems.length) notice("Workspace unlocked. Add a photo or video to get started.");
+    else notice("Workspace unlocked. You're ready to create a post.");
   } catch (error) {
     if (popupOpened) oauthPopup.close();
     if ($("#unlock-dialog").open) {

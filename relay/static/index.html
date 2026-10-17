@@ -31,7 +31,7 @@
 
   <aside class="sidebar">
     <a class="brand" href="#overview" data-nav="overview" aria-label="Relay overview"><span class="brand-mark"><i></i><i></i><i></i></span>relay<span class="brand-period">.</span></a>
-    <div class="workspace-label">PUBLISHING WORKSPACE</div>
+    <div class="workspace-label">Workspace</div>
     <nav aria-label="Workspace navigation">
       <a class="nav-item active" href="#overview" data-nav="overview" aria-current="page"><svg class="icon"><use href="#i-home"/></svg>Overview</a>
       <a class="nav-item" href="#analytics" data-nav="analytics"><svg class="icon"><use href="#i-chart"/></svg>Analytics</a>
@@ -51,17 +51,17 @@
       <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
       <section class="page-view" id="overview-view" data-page-view="overview">
        <section class="overview-hero" aria-labelledby="overview-title">
-        <div class="overview-hero-content"><div class="hero-kicker"><span class="hero-kicker-dot"></span>PUBLISHING WORKSPACE</div><h1 id="overview-title">Your next post<br><span>starts here.</span></h1><p>Connect your channels, organize your media, and publish from one workspace.</p><div class="hero-actions"><button class="button hero-primary" type="button" data-nav="publish"><svg class="icon"><use href="#i-plus"/></svg>Create a post</button><button class="hero-secondary" type="button" data-nav="content">Explore your media <svg class="icon"><use href="#i-arrow"/></svg></button></div></div>
+        <div class="overview-hero-content"><div class="hero-kicker"><span class="hero-kicker-dot"></span>Publishing workspace</div><h1 id="overview-title">Your next post<br><span>starts here.</span></h1><p>Connect a channel, add your media, and publish from one workspace.</p><div class="hero-actions"><button class="button hero-primary" id="overview-primary-action" type="button"><svg class="icon"><use href="#i-lock"/></svg><span>Unlock workspace</span></button><button class="hero-secondary" type="button" data-nav="content">Explore your media <svg class="icon"><use href="#i-arrow"/></svg></button></div></div>
        </section>
        <section class="overview-stats" aria-label="Workspace summary">
-        <article class="overview-stat"><span class="overview-stat-icon channels"><svg class="icon"><use href="#i-link"/></svg></span><div><small>CONNECTED CHANNELS</small><strong id="overview-channel-count">—</strong><span id="overview-channel-detail">Unlock to view your accounts</span></div><button type="button" class="stat-link" data-nav="connections" aria-label="Manage channels"><svg class="icon"><use href="#i-arrow"/></svg></button></article>
-        <article class="overview-stat"><span class="overview-stat-icon media"><svg class="icon"><use href="#i-media"/></svg></span><div><small>MEDIA IN LIBRARY</small><strong id="overview-media-count">—</strong><span id="overview-media-detail">Unlock to view your library</span></div><button type="button" class="stat-link" data-nav="content" aria-label="Open media library"><svg class="icon"><use href="#i-arrow"/></svg></button></article>
-        <article class="overview-stat overview-readiness"><span class="overview-stat-icon ready"><svg class="icon"><use href="#i-spark"/></svg></span><div><small>WORKSPACE STATUS</small><strong id="overview-readiness">Locked</strong><span id="overview-readiness-detail">Unlock to get started</span></div></article>
+        <article class="overview-stat"><span class="overview-stat-icon channels"><svg class="icon"><use href="#i-link"/></svg></span><div><small>Connected channels</small><strong id="overview-channel-count">—</strong><span id="overview-channel-detail">Unlock to view your accounts</span></div><button type="button" class="stat-link" data-nav="connections" aria-label="Manage channels"><svg class="icon"><use href="#i-arrow"/></svg></button></article>
+        <article class="overview-stat"><span class="overview-stat-icon media"><svg class="icon"><use href="#i-media"/></svg></span><div><small>Media in library</small><strong id="overview-media-count">—</strong><span id="overview-media-detail">Unlock to view your library</span></div><button type="button" class="stat-link" data-nav="content" aria-label="Open media library"><svg class="icon"><use href="#i-arrow"/></svg></button></article>
+        <article class="overview-stat overview-readiness"><span class="overview-stat-icon ready"><svg class="icon"><use href="#i-spark"/></svg></span><div><small>Workspace status</small><strong id="overview-readiness">Locked</strong><span id="overview-readiness-detail">Unlock to get started</span></div></article>
        </section>
        <div class="overview-layout">
         <div class="overview-main-column">
          <section class="workflow-card" aria-labelledby="workflow-title">
-          <div class="workflow-heading"><div><span class="eyebrow">YOUR NEXT STEPS</span><h2 id="workflow-title">Build your publishing flow</h2><p id="workflow-description">Unlock your workspace, then connect a channel to get started.</p></div><span class="workflow-status" id="workflow-status">Unlock to begin</span></div>
+          <div class="workflow-heading"><div><span class="eyebrow">Your next steps</span><h2 id="workflow-title">Build your publishing flow</h2><p id="workflow-description">Unlock your workspace, then connect a channel to get started.</p></div><span class="workflow-status" id="workflow-status">Unlock to begin</span></div>
           <ol class="workflow-steps">
             <li><a class="flow-step" href="#connections" data-nav="connections" data-flow-step="channels"><span class="flow-number">1</span><span class="flow-copy"><strong>Connect a channel</strong><small>Link Instagram or YouTube</small></span><svg class="icon"><use href="#i-arrow"/></svg></a></li>
             <li><a class="flow-step" href="#content" data-nav="content" data-flow-step="media"><span class="flow-number">2</span><span class="flow-copy"><strong>Add your media</strong><small>Upload a photo or video</small></span><svg class="icon"><use href="#i-arrow"/></svg></a></li>
@@ -69,13 +69,13 @@
           </ol>
          </section>
          <section class="overview-library" aria-labelledby="overview-library-heading">
-          <div class="section-heading"><div><span class="eyebrow">CONTENT AT A GLANCE</span><h2 id="overview-library-heading">Recent media</h2></div><button class="text-button" type="button" data-nav="content">Open library <svg class="icon"><use href="#i-arrow"/></svg></button></div>
+          <div class="section-heading"><div><span class="eyebrow">Content at a glance</span><h2 id="overview-library-heading">Recent media</h2></div><button class="text-button" type="button" data-nav="content">Open library <svg class="icon"><use href="#i-arrow"/></svg></button></div>
           <div id="overview-media-empty" class="overview-empty"><span class="overview-empty-icon"><svg class="icon"><use href="#i-media"/></svg></span><div><strong id="overview-media-empty-title">Your media has a home here.</strong><p id="overview-media-empty-description">Upload a photo or video and it’ll be ready whenever you create a post.</p></div><button class="button button-light" type="button" data-nav="content">Open media library</button></div>
           <div id="overview-media-list" class="overview-media-grid" hidden></div>
          </section>
         </div>
         <aside class="overview-side-column">
-         <section class="overview-channels-card"><div class="overview-side-heading"><div><span class="eyebrow">DESTINATIONS</span><h2>Your channels</h2></div><button class="icon-button" type="button" data-nav="connections" aria-label="Manage channels"><svg class="icon"><use href="#i-arrow"/></svg></button></div><div id="overview-channel-list" class="overview-channel-list"><div class="overview-channel-empty"><span class="channel-mini-icon"><svg class="icon"><use href="#i-link"/></svg></span><span><strong>Unlock your workspace</strong><small>Your connected channels will show up here.</small></span></div></div></section>
+         <section class="overview-channels-card"><div class="overview-side-heading"><div><span class="eyebrow">Destinations</span><h2>Your channels</h2></div><button class="icon-button" type="button" data-nav="connections" aria-label="Manage channels"><svg class="icon"><use href="#i-arrow"/></svg></button></div><div id="overview-channel-list" class="overview-channel-list"><div class="overview-channel-empty"><span class="channel-mini-icon"><svg class="icon"><use href="#i-link"/></svg></span><span><strong>Unlock your workspace</strong><small>Your connected channels will show up here.</small></span></div></div></section>
          <div class="overview-security"><span><svg class="icon"><use href="#i-shield"/></svg></span><p><strong>Your workspace stays private.</strong><small>Account tokens are encrypted and kept off your browser.</small></p></div>
         </aside>
        </div>
@@ -83,7 +83,7 @@
 
       <section class="page-view" id="analytics-view" data-page-view="analytics" hidden>
        <section class="page-heading analytics-heading">
-        <div><div class="eyebrow"><span></span>CHANNEL PERFORMANCE</div><h1>Analytics</h1><p>See how your connected channels and recent posts are performing.</p></div>
+        <div><div class="eyebrow"><span></span>Channel performance</div><h1>Analytics</h1><p>See how your connected channels and recent posts are performing.</p></div>
         <div class="analytics-controls"><label class="visually-hidden" for="analytics-range">Reporting period</label><select id="analytics-range"><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option></select><button class="button button-light" id="refresh-analytics" type="button"><svg class="icon"><use href="#i-refresh"/></svg>Refresh</button></div>
        </section>
        <div id="analytics-locked" class="analytics-message"><span class="overview-empty-icon"><svg class="icon"><use href="#i-lock"/></svg></span><div><strong>Unlock to view your analytics.</strong><p>Your channel data stays private in your workspace.</p></div><button class="button button-primary" id="analytics-unlock" type="button">Unlock workspace</button></div>
@@ -96,17 +96,17 @@
 
       <section class="page-view" id="connections-view" data-page-view="connections" hidden>
        <section class="page-heading">
-        <div><div class="eyebrow"><span></span>WORKSPACE</div><h1>Your channels</h1><p>Connect your social accounts and keep every publishing destination in one place.</p></div>
+        <div><div class="eyebrow"><span></span>Workspace</div><h1>Your channels</h1><p>Connect your social accounts and keep every publishing destination in one place.</p></div>
        </section>
 
        <section class="accounts-section" aria-labelledby="accounts-heading">
-        <div class="section-heading"><div><span class="eyebrow">CHANNEL MANAGEMENT</span><h2 id="accounts-heading">Connected channels <span class="count-pill" id="account-count">—</span></h2></div><button class="text-button" id="reload-accounts"><svg class="icon"><use href="#i-refresh"/></svg>Refresh</button></div>
+        <div class="section-heading"><div><span class="eyebrow">Channel management</span><h2 id="accounts-heading">Connected channels <span class="count-pill" id="account-count">—</span></h2></div><button class="text-button" id="reload-accounts"><svg class="icon"><use href="#i-refresh"/></svg>Refresh</button></div>
         <div id="accounts-list" class="accounts-list" hidden></div>
         <div id="empty-state" class="empty-state"><div class="empty-icon"><svg class="icon"><use href="#i-link"/></svg><span>+</span></div><h3 id="empty-title">No channels connected yet</h3><p id="empty-description">Unlock your workspace to view or connect an account.</p><span class="empty-foot" id="empty-foot"><svg class="icon"><use href="#i-lock"/></svg>Your connected accounts stay encrypted</span><button class="button button-light empty-connect" id="empty-connect">Unlock workspace</button></div>
        </section>
 
        <section class="platform-section" id="add-channel" aria-labelledby="platform-heading">
-        <div class="section-heading"><div><span class="eyebrow">SUPPORTED PLATFORMS</span><h2 id="platform-heading">Add a channel</h2></div><span>You can connect more than one account.</span></div>
+        <div class="section-heading"><div><span class="eyebrow">Supported platforms</span><h2 id="platform-heading">Add a channel</h2></div><span>You can connect more than one account.</span></div>
         <div class="platform-grid">
           <article class="platform-card instagram-card"><div class="card-top"><span class="platform-icon instagram"><svg><use href="#i-instagram"/></svg></span><span class="platform-state" id="instagram-state">Ready to connect</span></div><h3>Instagram</h3><p>Publish photo posts and Reels from a Business or Creator account.</p><div class="platform-tags"><span>Photo posts</span><span>Reels</span></div><button class="button button-primary connect-button" data-connect="instagram"><span>Connect Instagram</span><svg class="icon"><use href="#i-arrow"/></svg></button><div class="platform-note">Sign in securely through Instagram</div></article>
           <article class="platform-card youtube-card"><div class="card-top"><span class="platform-icon youtube"><svg><use href="#i-youtube"/></svg></span><span class="platform-state" id="youtube-state">Ready to connect</span></div><h3>YouTube</h3><p>Upload a video to your channel and choose its visibility.</p><div class="platform-tags"><span>Video uploads</span><span>Shorts</span></div><button class="button button-primary connect-button" data-connect="youtube"><span>Connect YouTube</span><svg class="icon"><use href="#i-arrow"/></svg></button><div class="platform-note">Sign in with your Google account</div></article>
@@ -116,7 +116,7 @@
 
       <section class="page-view" id="content-view" data-page-view="content" hidden>
        <section class="page-heading">
-        <div><div class="eyebrow"><span></span>MEDIA LIBRARY</div><h1>Your media</h1><p>Upload photos and videos once, then select them when you create a post. Anyone with a media link can view that file; Instagram needs a public link to fetch it before publishing.</p></div>
+        <div><div class="eyebrow"><span></span>Media library</div><h1>Your media</h1><p>Upload photos and videos here, then add them to a post. Instagram needs a public link to publish, and anyone with that link can view the file.</p></div>
        </section>
        <div class="content-layout">
         <section class="content-upload-card" aria-labelledby="content-upload-heading">
@@ -128,7 +128,7 @@
          </form>
         </section>
         <section class="content-library" aria-labelledby="content-library-heading">
-         <div class="section-heading"><div><span class="eyebrow">READY TO PUBLISH</span><h2 id="content-library-heading">Your content <span class="count-pill" id="content-count">0</span></h2></div><button class="text-button" id="reload-content"><svg class="icon"><use href="#i-refresh"/></svg>Refresh</button></div>
+         <div class="section-heading"><div><span class="eyebrow">Ready to publish</span><h2 id="content-library-heading">Your content <span class="count-pill" id="content-count">0</span></h2></div><button class="text-button" id="reload-content"><svg class="icon"><use href="#i-refresh"/></svg>Refresh</button></div>
          <div id="content-empty" class="empty-state"><div class="empty-icon"><svg class="icon"><use href="#i-media"/></svg><span>+</span></div><h3 id="content-empty-title">Your media will appear here.</h3><p id="content-empty-description">Upload a photo or video to get started.</p><button class="button button-light" id="content-empty-action" type="button">Upload content</button></div>
          <div id="content-list" class="content-grid" hidden></div>
         </section>
@@ -137,19 +137,19 @@
 
       <section class="page-view" id="publish-view" data-page-view="publish" hidden>
        <section class="page-heading">
-        <div><div class="eyebrow"><span></span>PUBLISHING WORKSPACE</div><h1>One post, every channel.</h1><p>Pick the media, choose the profiles, and tailor each platform before publishing.</p></div>
+         <div><div class="eyebrow"><span></span>Publishing workspace</div><h1>One post, every channel.</h1><p>Pick the media, choose the profiles, and tailor each platform before publishing.</p></div>
        </section>
        <div class="composer-workspace">
         <div class="composer-main">
          <section class="compose-card media-picker" aria-labelledby="composer-media-title">
-          <div class="compose-heading"><span class="compose-step-number">01</span><div><span class="eyebrow">START WITH YOUR MEDIA</span><h2 id="composer-media-title">What are we sharing?</h2><p>Choose a photo or video from your library. You’ll see the same media on every selected channel.</p></div></div>
+          <div class="compose-heading"><span class="compose-step-number">01</span><div><span class="eyebrow">Start with your media</span><h2 id="composer-media-title">What are we sharing?</h2><p>Choose a photo or video from your library. You’ll see the same media on every selected channel.</p></div></div>
           <div id="composer-media-empty" class="composer-inline-empty"><span class="composer-empty-icon"><svg class="icon"><use href="#i-media"/></svg></span><span><strong id="composer-media-empty-title">Unlock your workspace to see your media</strong><small id="composer-media-empty-copy">Your saved photos and videos will show here as visual previews.</small></span><button class="button button-light" type="button" data-nav="content">Open media library <svg class="icon"><use href="#i-arrow"/></svg></button></div>
           <div id="composer-media-grid" class="composer-media-grid" hidden></div>
          </section>
 
          <form id="publish-form" class="compose-form">
           <section class="compose-card" aria-labelledby="composer-destinations-title">
-           <div class="compose-heading"><span class="compose-step-number">02</span><div><span class="eyebrow">PICK YOUR PROFILES</span><h2 id="composer-destinations-title">Where should it go?</h2><p>Select one or more accounts. Profile photos make every destination easy to spot.</p></div><span class="selection-count" id="selected-account-count">0 selected</span></div>
+           <div class="compose-heading"><span class="compose-step-number">02</span><div><span class="eyebrow">Pick your profiles</span><h2 id="composer-destinations-title">Where should it go?</h2><p>Select one or more accounts. Profile photos make every destination easy to spot.</p></div><span class="selection-count" id="selected-account-count">0 selected</span></div>
            <div class="destination-grid">
             <article class="destination-group" data-provider-group="instagram"><div class="destination-group-heading"><span class="platform-icon instagram"><svg><use href="#i-instagram"/></svg></span><span><strong>Instagram</strong><small>Photo posts and Reels</small></span><span class="destination-group-count" id="instagram-destination-count">—</span></div><div class="destination-list" id="instagram-destinations"></div></article>
             <article class="destination-group" data-provider-group="youtube"><div class="destination-group-heading"><span class="platform-icon youtube"><svg><use href="#i-youtube"/></svg></span><span><strong>YouTube</strong><small>Video uploads</small></span><span class="destination-group-count" id="youtube-destination-count">—</span></div><div class="destination-list" id="youtube-destinations"></div></article>
@@ -157,7 +157,7 @@
           </section>
 
           <section class="compose-card post-details" aria-labelledby="composer-details-title">
-           <div class="compose-heading"><span class="compose-step-number">03</span><div><span class="eyebrow">MAKE IT YOURS</span><h2 id="composer-details-title">Post details</h2><p>Only the settings needed for your selected platforms appear here.</p></div></div>
+           <div class="compose-heading"><span class="compose-step-number">03</span><div><span class="eyebrow">Make it yours</span><h2 id="composer-details-title">Post details</h2><p>Only the settings needed for your selected platforms appear here.</p></div></div>
            <div id="instagram-details" class="platform-details" hidden><div class="platform-details-heading"><span class="platform-icon instagram small"><svg><use href="#i-instagram"/></svg></span><div><strong>Instagram caption</strong><small id="instagram-caption-targets">Applied to selected Instagram profiles</small></div></div><label class="visually-hidden" for="publish-caption">Instagram caption</label><textarea id="publish-caption" maxlength="2200" rows="4" placeholder="Write a caption for your post…"></textarea><small class="field-hint"><span id="caption-count">0</span> / 2,200</small></div>
            <div id="youtube-details" class="platform-details youtube-details" hidden><div class="platform-details-heading"><span class="platform-icon youtube small"><svg><use href="#i-youtube"/></svg></span><div><strong>YouTube video settings</strong><small id="youtube-caption-targets">Applied to selected YouTube channels</small></div></div><div class="youtube-fields"><div class="youtube-title-field"><label for="youtube-publish-title">Video title <span>Required · 100 characters max</span></label><input id="youtube-publish-title" type="text" maxlength="100" placeholder="Give your video a title"></div><div><label for="youtube-publish-privacy">Visibility</label><select id="youtube-publish-privacy"><option value="private">Private · Only you can see it</option><option value="unlisted">Unlisted · Anyone with the link</option><option value="public">Public · Everyone</option></select></div><div class="youtube-description-field"><label for="youtube-publish-description">Description <span>Optional · 5,000 characters max</span></label><textarea id="youtube-publish-description" maxlength="5000" rows="3" placeholder="Tell viewers what this video is about"></textarea></div><label class="kids-setting"><input id="youtube-made-for-kids" type="checkbox"><span><strong>Made for kids</strong><small>Set this if the video is directed to children.</small></span></label></div></div>
            <div id="details-empty" class="details-empty"><span class="details-empty-check">✳</span><span><strong>Choose a profile to see its post settings.</strong><small>Instagram gets a caption. YouTube gets a title and visibility choice.</small></span></div>
@@ -176,7 +176,7 @@
         </div>
 
         <aside class="composer-preview-column" aria-label="Post preview">
-         <section class="compose-card live-preview-card"><div class="preview-card-heading"><span class="eyebrow">LIVE PREVIEW</span><span class="preview-live-dot">● DRAFT</span></div><h2>How it will look</h2><div id="composer-preview-media" class="composer-preview-media"><span><svg class="icon"><use href="#i-media"/></svg><small>Your selected media<br>will appear here</small></span></div><div class="preview-file-row"><span class="preview-file-icon"><svg class="icon"><use href="#i-media"/></svg></span><span><strong id="preview-file-name">No media selected</strong><small id="preview-file-meta">Choose a preview to begin</small></span></div><div class="preview-divider"></div><div class="preview-target-heading"><strong>Posting to</strong><small id="preview-target-count">No profiles yet</small></div><div id="composer-preview-destinations" class="preview-destinations"><span class="preview-placeholder">Your selected profiles will show here</span></div><p id="composer-preview-copy" class="composer-preview-copy">Your post text preview will appear here.</p><div class="preview-note"><svg class="icon"><use href="#i-shield"/></svg><span>Instagram checks your media before it can be published. YouTube uploads with the visibility you choose.</span></div></section>
+         <section class="compose-card live-preview-card"><div class="preview-card-heading"><span class="eyebrow">Live preview</span><span class="preview-live-dot">● Draft</span></div><h2>How it will look</h2><div id="composer-preview-media" class="composer-preview-media"><span><svg class="icon"><use href="#i-media"/></svg><small>Your selected media<br>will appear here</small></span></div><div class="preview-file-row"><span class="preview-file-icon"><svg class="icon"><use href="#i-media"/></svg></span><span><strong id="preview-file-name">No media selected</strong><small id="preview-file-meta">Choose a preview to begin</small></span></div><div class="preview-divider"></div><div class="preview-target-heading"><strong>Posting to</strong><small id="preview-target-count">No profiles yet</small></div><div id="composer-preview-destinations" class="preview-destinations"><span class="preview-placeholder">Your selected profiles will show here</span></div><p id="composer-preview-copy" class="composer-preview-copy">Your post text preview will appear here.</p><div class="preview-note"><svg class="icon"><use href="#i-shield"/></svg><span>Instagram checks your media before it can be published. YouTube uploads with the visibility you choose.</span></div></section>
          <button class="preview-library-link" type="button" data-nav="content"><svg class="icon"><use href="#i-plus"/></svg> Add or manage media</button>
         </aside>
        </div>
@@ -189,7 +189,7 @@
 
   <dialog id="setup-dialog" class="setup-dialog" aria-labelledby="setup-title">
     <div class="dialog-top"><span class="dialog-icon"><svg class="icon"><use href="#i-book"/></svg></span><button class="icon-button" data-close="setup-dialog" aria-label="Close setup guide"><svg class="icon"><use href="#i-close"/></svg></button></div>
-    <div class="eyebrow">FIRST-TIME OAUTH SETUP</div>
+    <div class="eyebrow">First-time OAuth setup</div>
     <h2 id="setup-title">Give sign-in a way back.</h2>
     <p>Client credentials identify your app. You also need to register its exact callback address with each provider.</p>
     <div class="setup-step"><span>01</span><div>
