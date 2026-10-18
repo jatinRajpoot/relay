@@ -29,13 +29,13 @@ The default SQLite file is `data/relay.sqlite3`. Preserve `TOKEN_ENCRYPTION_KEY`
 
 ## Using the workspace
 
-The workspace is a dark-first studio UI with a light theme. The theme follows your OS on first load and is remembered per browser after that; toggle it with the sun icon in the sidebar, `⌘J` / `Ctrl+J`, or the command menu.
+The workspace opens in a light editorial theme with a dark option. Your choice is remembered in this browser; toggle it with the theme button in the sidebar, `⌘J` / `Ctrl+J`, or the command menu.
 
-Press `⌘K` / `Ctrl+K` (or the search icon) for the command menu: jump to any page, create a post, connect a channel, open the setup guide, or toggle the theme. Outside text fields, `n` opens the composer and `g` followed by `h`/`n`/`l`/`c`/`a`/`y` jumps to Home, Create, Media, Channels, Analytics, or History.
+Press `⌘K` / `Ctrl+K` (or the search icon) for the command menu: jump to any page, create a post, connect a channel, open the setup guide, or toggle the theme. Outside text fields, `n` opens the composer and `g` followed by `h`/`n`/`l`/`c`/`a`/`y` jumps to Studio, Create, Library, Channels, Insights, or Published.
 
-Home is a status dashboard: channel, media and published counts, the setup checklist, recent media, connected channels, and the last three published posts. **Create post** keeps media, channels, and details on one page with a sticky preview and publish panel, so you can scroll back and change anything before sending. Instagram still requires a separate confirmation before a post goes live; the delivery panel tracks each destination individually.
+**Studio** brings channel, media and published counts together with a setup checklist, recent media, connected channels, and the last three published posts. **Create post** keeps media, channels, and details on one page with a live preview and a clear publish action. Instagram still requires a separate confirmation before a post goes live; the delivery panel tracks each destination individually.
 
-On screens narrower than 720px the sidebar is replaced by a bottom tab bar and the composer stacks into a single column.
+Below 820px the sidebar becomes a bottom tab bar; the composer stacks into one column below 640px.
 
 ## Configure the provider dashboards
 
@@ -74,7 +74,7 @@ Use `GET /accounts` to list connected accounts. Each account has its own local I
 
 ## View channel analytics
 
-Open **Analytics** in the workspace to choose a 7, 30, or 90 day period. YouTube shows channel totals, views, likes, comments, subscriber gains, and top videos from YouTube Analytics. Instagram shows likes and comments on media published during the selected period, ranked by interactions. Instagram reach and impressions are not included. Analytics are fetched from the connected providers and require a logged-in account; YouTube's Analytics API must be enabled in the Google Cloud project.
+Open **Insights** in the workspace to choose a 7, 30, or 90 day period. YouTube shows channel totals, views, likes, comments, subscriber gains, and top videos from YouTube Analytics. Instagram shows likes and comments on media published during the selected period, ranked by interactions. Instagram reach and impressions are not included. Analytics are fetched from the connected providers and require a logged-in account; YouTube's Analytics API must be enabled in the Google Cloud project.
 
 Access tokens refresh automatically **when used** near expiry (YouTube: two minutes, Instagram: one day). `POST /accounts/{id}/refresh` explicitly refreshes and saves the result. There is no background scheduler: an unused Instagram connection that expires must be reauthorized. A provider revocation or Google's `invalid_grant` also requires reconnecting.
 
@@ -109,7 +109,7 @@ The frontend's **Content** section uploads JPEG photos and video files to the me
 
 Instagram first sends the media to Meta for processing; that step does not publish the post. The **Publishing status** area shows each account as processing, ready but not live, publishing, or confirmed published. Processing statuses refresh automatically about once a minute. When a post is ready, select **Publish ready posts**; the row changes to **Published** only after Relay receives confirmation.
 
-Open **History** to review the latest 200 posts published through Relay. Instagram posts are added after publishing completes; YouTube uploads are added after the upload succeeds. Previously published Instagram jobs are included when the service upgrades its local database. Disconnecting an account removes its local history records along with its saved connection.
+Open **Published** to review the latest 200 posts published through Relay. Instagram posts are added after publishing completes; YouTube uploads are added after the upload succeeds. Previously published Instagram jobs are included when the service upgrades its local database. Disconnecting an account removes its local history records along with its saved connection.
 
 1. `POST /instagram/posts` creates an **unpublished** container and saves its job in SQLite:
 

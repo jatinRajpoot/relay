@@ -1,17 +1,1 @@
-/* Ordered stylesheet entry point. Keep imports in cascade order. */
-@import url("/static/styles/tokens.css");
-@import url("/static/styles/base.css");
-@import url("/static/styles/shell.css");
-@import url("/static/styles/overview.css");
-@import url("/static/styles/composer.css");
-@import url("/static/styles/library.css");
-@import url("/static/styles/overlays.css");
-@import url("/static/styles/responsive.css");
-@import url("/static/styles/theme-refresh.css");
-@import url("/static/styles/composer-refresh.css");
-@import url("/static/styles/library-refresh.css");
-@import url("/static/styles/workspace-redesign.css");
-@import url("/static/styles/overview-redesign.css");
-@import url("/static/styles/composer-redesign.css");
-@import url("/static/styles/list-redesign.css");
-@import url("/static/styles/accent.css");
+@import url("/static/styles/studio.css");

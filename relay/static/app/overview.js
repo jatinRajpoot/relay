@@ -302,7 +302,7 @@ function setPage(page, { recordHistory = true } = {}) {
       else item.removeAttribute("aria-current");
     }
   });
-  const pageLabels = { overview: "Overview", analytics: "Analytics", history: "History", connections: "Channels", content: "Media", publish: "Create a post" };
+  const pageLabels = { overview: "Studio", analytics: "Insights", history: "Published", connections: "Channels", content: "Library", publish: "Create a post" };
   $("#breadcrumb-label").textContent = pageLabels[page];
   document.title = `${pageLabels[page]} · Relay`;
   if (window.location.hash !== `#${page}`) {
