@@ -194,7 +194,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .brand-name>span {
   color:var(--accent)
 }
-.rail-create {
+.rail .rail-create {
   width:100%;
   min-height:42px;
   flex:none;
@@ -204,7 +204,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
   background:var(--accent);
   color:#fffaf5;
 }
-.rail-create:hover:not(:disabled) {
+.rail .rail-create:hover:not(:disabled) {
   border-color:var(--accent-hover);
   background:var(--accent-hover);
   color:#fffaf5
