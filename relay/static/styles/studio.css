@@ -195,8 +195,19 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
   color:var(--accent)
 }
 .rail-create {
-  margin:0 3px 29px;
-  justify-content:flex-start
+  width:100%;
+  min-height:42px;
+  flex:none;
+  margin:0 0 24px;
+  justify-content:flex-start;
+  border-color:var(--accent);
+  background:var(--accent);
+  color:#fffaf5;
+}
+.rail-create:hover:not(:disabled) {
+  border-color:var(--accent-hover);
+  background:var(--accent-hover);
+  color:#fffaf5
 }
 .rail-nav {
   display:flex;
