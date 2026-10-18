@@ -3,14 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f7f8f5">
+  <meta name="theme-color" content="#f7f1e7">
   <meta name="description" content="Manage your social channels, media, and publishing workflow in Relay.">
   <title>Overview · Relay</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/studio.css">
   <script src="/static/app.js" type="module"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
   <svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
     <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
@@ -59,21 +60,17 @@
 
   <div class="app-content">
     <header class="topbar"><div class="breadcrumb"><span class="breadcrumb-kicker">Your workspace</span><strong id="breadcrumb-label">Home</strong></div><div class="topbar-actions"><span class="environment"><span></span>Personal workspace</span><button class="button button-light session-button" id="session-button"><svg class="icon"><use href="#i-lock"/></svg><span>Unlock workspace</span></button><button class="icon-button" data-setup aria-label="Open setup guide"><svg class="icon"><use href="#i-book"/></svg></button></div></header>
-    <main>
+    <main id="main-content">
       <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
       <section class="page-view" id="overview-view" data-page-view="overview">
        <section class="overview-hero" aria-labelledby="overview-title">
-        <div class="overview-hero-content"><div class="hero-kicker"><span class="hero-kicker-dot"></span>Social publishing, in one place</div><h1 id="overview-title">Make room for<br>your next good post.</h1><p>Choose a photo or video, pick where it goes, and review everything before it leaves Relay.</p><div class="hero-actions"><button class="button hero-primary" id="overview-primary-action" type="button"><svg class="icon"><use href="#i-plus"/></svg><span>Create a post</span></button><button class="hero-secondary" type="button" data-nav="content">Browse media <svg class="icon"><use href="#i-arrow"/></svg></button></div></div>
-        <div class="hero-workspace-status"><span class="status-orbit"><svg class="icon"><use href="#i-spark"/></svg></span><div><small>You're all set for</small><strong id="overview-readiness">Unlock to begin</strong><span id="overview-readiness-detail">Unlock your workspace to get started</span></div><div class="hero-status-counts"><span><strong id="overview-channel-count">—</strong><small>channels</small></span><i></i><span><strong id="overview-media-count">—</strong><small>media items</small></span></div></div>
-       </section>
-       <section class="overview-facts" aria-label="Workspace at a glance">
-        <div class="overview-fact"><span class="overview-fact-icon"><svg class="icon"><use href="#i-link"/></svg></span><span><small>Connected channels</small><strong id="overview-channel-detail">Unlock to view your accounts</strong></span><button type="button" class="stat-link" data-nav="connections" aria-label="Manage channels"><svg class="icon"><use href="#i-arrow"/></svg></button></div>
-        <div class="overview-fact"><span class="overview-fact-icon"><svg class="icon"><use href="#i-media"/></svg></span><span><small>Media ready to use</small><strong id="overview-media-detail">Unlock to view your library</strong></span><button type="button" class="stat-link" data-nav="content" aria-label="Open media library"><svg class="icon"><use href="#i-arrow"/></svg></button></div>
+        <div class="overview-hero-content"><div class="hero-kicker"><span class="hero-kicker-dot"></span>Relay · Publishing studio</div><h1 id="overview-title">Make your next<br>post here.</h1><p>Choose a file, pick your channels, and review every detail before you send.</p><div class="hero-actions"><button class="button hero-primary" id="overview-primary-action" type="button"><svg class="icon"><use href="#i-plus"/></svg><span>Create a post</span></button><button class="hero-secondary" type="button" data-nav="content">Browse media <svg class="icon"><use href="#i-arrow"/></svg></button></div></div>
+        <div class="hero-workspace-status"><span class="status-orbit"><svg class="icon"><use href="#i-spark"/></svg></span><div><small>Workspace status</small><strong id="overview-readiness">Your workspace awaits</strong><span id="overview-readiness-detail">Unlock once to see your channels and media.</span></div></div>
        </section>
        <div class="overview-layout">
         <div class="overview-main-column">
          <section class="workflow-card" aria-labelledby="workflow-title">
-          <div class="workflow-heading"><div><span class="eyebrow">A simple path</span><h2 id="workflow-title">Three small steps to publish</h2><p id="workflow-description">Unlock your workspace, then connect a channel to get started.</p></div><span class="workflow-status" id="workflow-status">Unlock to begin</span></div>
+          <div class="workflow-heading"><div><span class="eyebrow">At a glance</span><h2 id="workflow-title">Your publishing checklist</h2><p id="workflow-description">Unlock your workspace, then connect a channel to get started.</p></div><span class="workflow-status" id="workflow-status">Unlock to begin</span></div>
           <ol class="workflow-steps">
             <li><a class="flow-step" href="#connections" data-nav="connections" data-flow-step="channels"><span class="flow-number">1</span><span class="flow-copy"><strong>Connect a channel</strong><small>Link Instagram or YouTube</small></span><svg class="icon"><use href="#i-arrow"/></svg></a></li>
             <li><a class="flow-step" href="#content" data-nav="content" data-flow-step="media"><span class="flow-number">2</span><span class="flow-copy"><strong>Add your media</strong><small>Upload a photo or video</small></span><svg class="icon"><use href="#i-arrow"/></svg></a></li>
