@@ -82,6 +82,7 @@ function renderComposerMedia() {
     const remove = document.createElement("button");
     remove.className = "attachment-remove";
     remove.type = "button";
+    remove.disabled = publishing;
     remove.setAttribute("aria-label", "Remove attached media");
     remove.textContent = "×";
     remove.addEventListener("click", () => {
@@ -170,6 +171,8 @@ function selectComposerMedia(item) {
     const blocked = accountList.filter((account) => selectedAccountIds.has(account.id) && !canUseMedia(item, account.provider));
     blocked.forEach((account) => selectedAccountIds.delete(account.id));
     selectedContentId = item.id;
+    const compatible = accountList.filter((account) => canUseMedia(item, account.provider));
+    if (!selectedAccountIds.size && compatible.length === 1) selectedAccountIds.add(compatible[0].id);
     if (blocked.length) {
       const providers = [...new Set(blocked.map((account) => names[account.provider]))].join(" and ");
       notice(`This ${mediaKind(item).toLowerCase()} can’t go to ${providers}.`, false, {
@@ -203,14 +206,17 @@ function renderComposerDestinations() {
     checkbox.disabled = publishing || !authenticated || !configured || !compatible;
     checkbox.setAttribute("aria-label", (selected ? "Remove " : "Add ") + account.name + " on " + names[account.provider]);
     checkbox.addEventListener("change", () => {
+      const previous = new Set(selectedAccountIds);
       if (checkbox.checked) selectedAccountIds.add(account.id);
       else selectedAccountIds.delete(account.id);
       renderComposer();
       scheduleDraftSave();
+      notice(`${account.name} ${checkbox.checked ? "added to" : "removed from"} this post.`, false, { label: "Undo", run() { selectedAccountIds = previous; renderComposer(); scheduleDraftSave(); } });
     });
     const name = document.createElement("span");
     name.className = "profile-pill-name";
     name.textContent = account.name;
+    if (!compatible) name.textContent += " · choose a video";
     choice.append(checkbox, makeProfileAvatar(account, account.provider), name);
     container.append(choice);
   }
@@ -222,7 +228,7 @@ function renderComposerDestinations() {
     action.type = "button";
     action.className = "button button-quiet button-sm";
     action.textContent = authenticated ? "Connect a channel" : "Unlock workspace";
-    action.addEventListener("click", () => authenticated ? setPage("connections") : showUnlock());
+    action.addEventListener("click", () => authenticated ? openChannelSheet() : showUnlock());
     container.append(empty, action);
   }
   const selected = accountList.filter((account) => selectedAccountIds.has(account.id));
@@ -239,7 +245,7 @@ function renderComposerDetails() {
   if ((activeDetailsTab === "instagram" && !hasInstagram) || (activeDetailsTab === "youtube" && !hasYoutube)) activeDetailsTab = "master";
   $("#instagram-details").hidden = activeDetailsTab === "youtube";
   $("#instagram-details").setAttribute("aria-labelledby", activeDetailsTab === "instagram" ? "instagram-tab" : "master-tab");
-  $("#youtube-details").hidden = activeDetailsTab !== "youtube";
+  $("#youtube-details").hidden = !hasYoutube;
   document.querySelectorAll("[data-details-tab]").forEach((tab) => {
     const active = tab.dataset.detailsTab === activeDetailsTab;
     tab.classList.toggle("active", active);
@@ -334,6 +340,7 @@ function renderComposer() {
   renderComposerDetails();
   renderComposerPreview();
   syncPublishButtons();
+  renderJourney();
   $("#active-character-count").textContent = String(activeDetailsTab === "youtube" ? $("#youtube-publish-title").value.length : $("#publish-caption").value.length);
 }
 
@@ -344,6 +351,8 @@ function syncPublishButtons() {
   const hasInstagram = selected.some((account) => account.provider === "instagram");
   const hasYoutube = selected.some((account) => account.provider === "youtube");
   const title = $("#youtube-publish-title").value.trim();
+  $("#youtube-title-hint").hidden = !hasYoutube || Boolean(title);
+  $("#youtube-publish-title").setAttribute("aria-invalid", String(hasYoutube && !title));
   const ready = authenticated && contentStorageConfigured && Boolean(item) && selected.length > 0 &&
     (!hasInstagram || instagramMediaConfigured) && (!hasYoutube || item.youtube_compatible) &&
     (!hasInstagram || item.instagram_compatible) && (!hasYoutube || title.length > 0) && !publishing && !hasResults;

@@ -7,9 +7,9 @@ async function api(path, options = {}) {
     const signal = options.signal || (method === "GET" && AbortSignal.timeout ? AbortSignal.timeout(30_000) : undefined);
     response = await fetch(path, { credentials: "same-origin", ...options, headers, signal });
   } catch (cause) {
-    const draftSaved = activePage === "publish" && typeof saveLocalDraft === "function";
-    if (draftSaved) saveLocalDraft({ announce: false });
-    const recovery = draftSaved ? "Your draft is saved in this browser." : "Try again when the connection is back.";
+    const hasDraft = activePage === "publish" && typeof saveLocalDraft === "function";
+    const draftSaved = hasDraft && saveLocalDraft({ announce: false });
+    const recovery = draftSaved ? "Your draft is saved in this browser." : hasDraft ? "Your input is still in this window." : "Try again when the connection is back.";
     const message = cause?.name === "TimeoutError"
       ? `Relay took too long to respond. ${recovery}`
       : `Couldn't reach Relay. ${recovery}`;
@@ -20,9 +20,8 @@ async function api(path, options = {}) {
   const data = response.status === 204 ? null : await response.json();
   if (!response.ok) {
     if (response.status === 401) {
-      authenticated = false;
-      renderSession();
-      window.location.replace("/login");
+      saveLocalDraft({ announce: false });
+      showSessionRecovery();
     }
     const error = new Error(typeof data?.detail === "string" ? data.detail : "Relay couldn't finish that request. Try again in a moment.");
     error.status = response.status;
@@ -128,8 +127,6 @@ function renderSession() {
 }
 
 function renderWorkspaceFlow() {
-  const hasChannel = authenticated && accountList.length > 0;
-  const hasMedia = authenticated && contentItems.length > 0;
   const button = $("#overview-primary-action");
   if (!button) return;
 
@@ -140,21 +137,13 @@ function renderWorkspaceFlow() {
     label = "Unlock workspace";
     destination = "unlock";
     symbol = "unlock";
-  } else if (!hasChannel) {
-    label = "Connect a channel";
-    destination = "connections";
-    symbol = "link";
-  } else if (!contentStorageConfigured) {
-    label = "View media setup";
-    destination = "setup";
-    symbol = "alert";
-  } else if (!hasMedia) {
-    label = "Add media";
-    destination = "upload";
-    symbol = "upload";
+  } else if (readLocalDraft()) {
+    label = "Continue your draft";
+    symbol = "arrow";
   }
   button.querySelector("span").textContent = label;
   button.querySelector("use").setAttribute("href", `#i-${symbol}`);
   button.dataset.nextAction = destination;
   renderOverview();
+  renderJourney();
 }

@@ -23,3 +23,7 @@ def register_service_routes(app, context: RouteContext):
         if not has_session(request):
             return RedirectResponse("/login", status_code=303)
         return FileResponse(frontend / "index.html")
+
+    @app.get("/try", include_in_schema=False)
+    async def preview():
+        return FileResponse(frontend / "try.html")

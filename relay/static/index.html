@@ -8,6 +8,7 @@
   <title>Studio · Relay</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/styles/journey.css">
   <script>try { document.documentElement.dataset.theme = localStorage.getItem("relay-theme") || "light"; } catch { document.documentElement.dataset.theme = "light"; }</script>
 </head>
 <body>
@@ -99,6 +100,7 @@
           <strong id="breadcrumb-label">Studio</strong>
         </div>
         <div class="topbar-actions">
+          <span id="connection-status" class="connection-status" role="status">Online</span>
           <span class="visually-hidden" id="account-label"></span>
           <button class="icon-button" id="palette-button" type="button" aria-label="Search and commands">
             <svg class="icon"><use href="#i-search"/></svg>
@@ -113,6 +115,7 @@
       </header>
 
       <main id="main-content">
+        <div id="journey-recovery" class="journey-recovery" role="alert" hidden></div>
         <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
         <div id="global-drop-overlay" class="global-drop-overlay" hidden><span><svg class="icon"><use href="#i-upload"/></svg>Drop to add media</span></div>
 
@@ -124,6 +127,11 @@
               <button class="button button-primary" id="overview-primary-action" type="button"><svg class="icon"><use href="#i-plus"/></svg><span>Create a post</span></button>
             </div>
           </div>
+
+          <section class="journey-launch" aria-labelledby="journey-launch-title">
+            <div><span class="journey-eyebrow">YOUR NEXT POST</span><h2 id="journey-launch-title">From an idea to everywhere.</h2><p id="journey-launch-copy">Add your media. Make it yours. Send it out.</p></div>
+            <ol class="journey-route" aria-label="Publishing flow"><li><b>01</b> Add media</li><li><b>02</b> Make it yours</li><li><b>03</b> Review delivery</li></ol>
+          </section>
 
           <div class="stat-strip" aria-label="Workspace summary">
             <button class="stat-tile" type="button" data-nav="connections">
@@ -175,9 +183,12 @@
           <div class="page-intro composer-page-heading"><div><h1>Create a post</h1></div></div>
 
           <form id="publish-form" class="composer-form">
+            <ol class="journey-progress" aria-label="Post progress"><li id="journey-media">01 <span>Media</span></li><li id="journey-details">02 <span>Details & channels</span></li><li id="journey-delivery">03 <span>Delivery</span></li></ol>
+            <section id="composer-start" class="composer-start"><div><span class="journey-eyebrow">START WITH THE WORK</span><h2>A photo. A film. Your next post.</h2><p id="journey-media-copy">Choose a saved file or upload something new.</p></div><button id="journey-add-media" class="button button-secondary" type="button"><svg class="icon"><use href="#i-media"/></svg> Choose media</button></section>
             <section class="composer-channel-strip" aria-labelledby="composer-destinations-title">
               <div class="composer-strip-label"><h2 id="composer-destinations-title">Send to</h2><span id="selected-account-count">0 selected</span></div>
               <div id="composer-destinations" class="profile-pills" role="group" aria-label="Publishing channels"></div>
+              <button id="journey-add-channel" class="text-button" type="button">+ Add channel</button>
             </section>
 
             <div class="composer" id="composer-workspace">
@@ -195,7 +206,7 @@
                   </div>
                   <div id="youtube-details" class="platform-block" role="tabpanel" aria-labelledby="youtube-tab" hidden>
                     <div class="field-grid">
-                      <div class="field field-wide"><label for="youtube-publish-title">Video title</label><input id="youtube-publish-title" type="text" maxlength="100" placeholder="Add a title"></div>
+                      <div class="field field-wide"><label for="youtube-publish-title">YouTube title</label><input id="youtube-publish-title" type="text" maxlength="100" placeholder="Name your video" aria-describedby="youtube-title-hint"><small id="youtube-title-hint">Add a title of 1–100 characters to continue.</small></div>
                       <div class="field field-wide"><label for="youtube-publish-description">Description</label><textarea id="youtube-publish-description" maxlength="5000" rows="3" placeholder="Add a description"></textarea></div>
                       <div class="youtube-options">
                         <div class="field"><label for="youtube-publish-privacy">Visibility</label><select id="youtube-publish-privacy"><option value="private">Private</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select></div>
@@ -237,6 +248,7 @@
                     <button class="button button-primary" id="publish-submit" type="submit" disabled><span>Publish to 0 channels</span><svg class="icon"><use href="#i-arrow"/></svg></button>
                   </div>
                 </div>
+                <p id="journey-next-step" class="journey-next-step" role="status"></p>
               </div>
 
               <aside class="composer-side" aria-label="Live preview">
@@ -437,6 +449,9 @@
     </a>
   </nav>
 
+  <dialog id="channel-sheet" class="dialog journey-sheet" aria-labelledby="channel-sheet-title"><div class="dialog-top"><h2 id="channel-sheet-title">Connect a channel</h2><button class="icon-button" type="button" data-close="channel-sheet" aria-label="Back to post">×</button></div><p class="field-meta">Your post stays here while you connect.</p><div id="channel-sheet-slot"></div><div id="channel-sheet-error" class="journey-recovery" role="alert" hidden></div><button class="button button-secondary" type="button" data-close="channel-sheet">Back to post</button></dialog>
+  <dialog id="session-recovery-dialog" class="dialog" aria-labelledby="session-recovery-title"><h2 id="session-recovery-title">Sign in to continue this step</h2><p>Your text and selections are still here. Sign in, then return to this window.</p><button id="session-resume" class="button button-primary" type="button">Sign in</button><a href="/login" id="session-same-tab" class="text-button">Continue in this tab</a><p id="session-popup-error" role="alert" hidden>Allow popups or continue in this tab. Your draft will reopen.</p></dialog>
+
   <!-- ── Command palette ──────────────────────────────────────── -->
   <dialog id="palette-dialog" class="palette" aria-labelledby="palette-title">
     <h2 id="palette-title" class="visually-hidden">Command menu</h2>
@@ -566,6 +581,7 @@
   <noscript><div class="noscript">Relay needs JavaScript to manage your channels.</div></noscript>
   <!-- These classic scripts share page state; preserve their order. app.js starts the app last. -->
   <script src="/static/app/core.js"></script>
+  <script src="/static/app/flow-state.js"></script>
   <script src="/static/app/shell.js"></script>
   <script src="/static/app/overview.js"></script>
   <script src="/static/app/composer.js"></script>
@@ -574,6 +590,7 @@
   <script src="/static/app/connect.js"></script>
   <script src="/static/app/publishing.js"></script>
   <script src="/static/app/commands.js"></script>
+  <script src="/static/app/journey.js"></script>
   <script type="module" src="/static/app.js"></script>
 </body>
 </html>
