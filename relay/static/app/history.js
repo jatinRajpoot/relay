@@ -8,9 +8,6 @@ function renderAccounts() {
   $("#empty-state").hidden = accountList.length > 0;
   list.hidden = accountList.length === 0;
   $("#empty-title").textContent = "No channels connected yet";
-  $("#empty-description").textContent = authenticated
-    ? "Connect Instagram or YouTube to start publishing."
-    : "Unlock your workspace to view or connect an account.";
   $("#empty-connect").textContent = authenticated ? "Connect a channel" : "Unlock workspace";
   for (const provider of Object.keys(names)) {
     const count = accountList.filter((account) => account.provider === provider).length;
@@ -77,8 +74,17 @@ function renderOverviewPosts() {
     paragraph.textContent = text;
     return paragraph;
   };
-  if (!authenticated) { container.append(note("Unlock to see your publishing activity.")); return; }
-  if (historyError) { container.append(note(historyError)); return; }
+  if (!authenticated) { container.append(note("Unlock to see your posts.")); return; }
+  if (historyError) {
+    container.append(note(`${historyError} Your posts are unchanged.`));
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "text-button";
+    retry.textContent = "Retry now";
+    retry.addEventListener("click", () => void loadPostHistory());
+    container.append(retry);
+    return;
+  }
   if (!historyLoaded || historyLoading) { container.append(note("Loading recent activity…")); return; }
   if (!postHistory.length) { container.append(note("Nothing published yet.")); return; }
   for (const post of postHistory.slice(0, 3)) {
@@ -141,26 +147,16 @@ function renderPostHistory() {
     const refresh = document.createElement("button");
     refresh.className = "text-button";
     refresh.type = "button";
-    refresh.textContent = "Try again";
+    refresh.textContent = "Retry now";
     refresh.addEventListener("click", () => void loadPostHistory());
     error.append(message, refresh);
   }
   $("#history-empty").hidden = !authenticated || loading || hasError || hasPosts;
   const emptyTitle = $("#history-empty h3");
-  const emptyCopy = $("#history-empty p");
-  if (historyFilter === "drafts") {
-    emptyTitle.textContent = "No saved drafts";
-    emptyCopy.textContent = "Save a draft from Create a post to keep it here.";
-  } else if (historyFilter === "failed") {
-    emptyTitle.textContent = "No failed posts";
-    emptyCopy.textContent = "Failed posts will appear here.";
-  } else if (historyFilter === "published") {
-    emptyTitle.textContent = "Nothing published yet";
-    emptyCopy.textContent = "Published posts will appear here.";
-  } else {
-    emptyTitle.textContent = "Nothing here yet";
-    emptyCopy.textContent = "Posts and saved drafts will appear here.";
-  }
+  if (historyFilter === "drafts") emptyTitle.textContent = "No saved drafts";
+  else if (historyFilter === "failed") emptyTitle.textContent = "No failed posts";
+  else if (historyFilter === "published") emptyTitle.textContent = "Nothing published yet";
+  else emptyTitle.textContent = "Nothing here yet";
   const list = $("#history-list");
   list.replaceChildren();
   list.hidden = !hasPosts;

@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#f3f0e7">
   <title>Your account · Relay</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/styles.css">
   <link rel="stylesheet" href="/static/account.css">
+  <link rel="stylesheet" href="/static/styles.css">
   <script src="/static/auth.js" type="module"></script>
 </head>
 <body class="public-page auth-page">
@@ -18,15 +18,10 @@
   </header>
   <main class="auth-layout">
     <section class="auth-story" aria-labelledby="auth-story-title">
-      <p class="eyebrow">A PLACE FOR WHAT YOU MAKE</p>
       <h1 id="auth-story-title">Your work,<br>in good <em>company.</em></h1>
-      <p>Bring every channel and project into a private workspace. Pick up where you left off and keep your next post moving.</p>
-      <div class="auth-story-note"><span class="live-dot"></span>Instagram and YouTube, together in Relay.</div>
     </section>
     <section class="auth-card" aria-labelledby="auth-title">
-      <p class="eyebrow" id="auth-kicker">WELCOME BACK</p>
       <h2 id="auth-title">Log in to your studio.</h2>
-      <p class="auth-description" id="auth-description">Your channels and workspaces are ready when you are.</p>
       <form id="account-form">
         <div data-signup hidden>
           <label for="name">Your name</label>
@@ -46,8 +41,8 @@
           <input id="workspace-name" name="workspace_name" maxlength="80" placeholder="e.g. Northstar Studio" value="My workspace" disabled>
           <small>You can create more workspaces any time.</small>
         </div>
-        <p class="form-error" id="account-error" role="alert" hidden></p>
-        <button class="button button-primary button-block" id="account-submit" type="submit">Log in <span aria-hidden="true">↗</span></button>
+        <div class="form-error" id="account-error" role="alert" hidden></div>
+        <button class="button button-primary button-block" id="account-submit" type="submit">Log in</button>
       </form>
       <p class="auth-switch"><span id="switch-prompt">New to Relay?</span> <a id="switch-link" href="/signup">Create an account</a></p>
     </section>

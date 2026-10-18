@@ -3,9 +3,19 @@ async function api(path, options = {}) {
   try {
     const headers = new Headers(options.headers);
     if (activeWorkspaceId) headers.set("X-Workspace-ID", activeWorkspaceId);
-    response = await fetch(path, { credentials: "same-origin", ...options, headers });
-  } catch {
-    throw new Error("Couldn't reach Relay. Check that the local service is running.");
+    const method = String(options.method || "GET").toUpperCase();
+    const signal = options.signal || (method === "GET" && AbortSignal.timeout ? AbortSignal.timeout(30_000) : undefined);
+    response = await fetch(path, { credentials: "same-origin", ...options, headers, signal });
+  } catch (cause) {
+    const draftSaved = activePage === "publish" && typeof saveLocalDraft === "function";
+    if (draftSaved) saveLocalDraft({ announce: false });
+    const recovery = draftSaved ? "Your draft is saved in this browser." : "Try again when the connection is back.";
+    const message = cause?.name === "TimeoutError"
+      ? `Relay took too long to respond. ${recovery}`
+      : `Couldn't reach Relay. ${recovery}`;
+    const error = new Error(message);
+    error.network = true;
+    throw error;
   }
   const data = response.status === 204 ? null : await response.json();
   if (!response.ok) {
@@ -14,7 +24,9 @@ async function api(path, options = {}) {
       renderSession();
       window.location.replace("/login");
     }
-    throw new Error(typeof data?.detail === "string" ? data.detail : "Something went wrong. Please try again.");
+    const error = new Error(typeof data?.detail === "string" ? data.detail : "Relay couldn't finish that request. Try again in a moment.");
+    error.status = response.status;
+    throw error;
   }
   return data;
 }
@@ -78,9 +90,6 @@ function renderSession() {
   button.querySelector("span").textContent = authenticated ? "Lock workspace" : "Unlock workspace";
   button.querySelector("use").setAttribute("href", authenticated ? "#i-lock" : "#i-unlock");
   $("#empty-connect").textContent = authenticated ? "Connect a channel" : "Unlock workspace";
-  $("#empty-description").textContent = authenticated
-    ? "Connect Instagram or YouTube to start publishing."
-    : "Unlock your workspace to view or connect an account.";
   if (!authenticated) {
     if (instagramStatusTimer !== null) window.clearTimeout(instagramStatusTimer);
     instagramStatusTimer = null;
@@ -121,35 +130,31 @@ function renderSession() {
 function renderWorkspaceFlow() {
   const hasChannel = authenticated && accountList.length > 0;
   const hasMedia = authenticated && contentItems.length > 0;
-  let status = "Unlock to begin";
-  let description = "Unlock your workspace, then connect a channel to get started.";
-  if (authenticated && !hasChannel) {
-    status = "Connect your first channel";
-    description = "Start by connecting Instagram or YouTube. You can add more channels later.";
-  } else if (hasChannel && !contentStorageConfigured) {
-    status = "Media storage needs setup";
-    description = "Your channels are connected. Configure media storage to add content and publish.";
-  } else if (hasChannel && !hasMedia) {
-    status = "Add your first media";
-    description = "Your channels are connected. Upload a photo or video to continue.";
-  } else if (hasChannel && hasMedia) {
-    status = "Ready to publish";
-    description = "Your workspace is ready. Create a post whenever you are.";
+  const button = $("#overview-primary-action");
+  if (!button) return;
+
+  let label = "Create a post";
+  let destination = "publish";
+  let symbol = "plus";
+  if (!authenticated) {
+    label = "Unlock workspace";
+    destination = "unlock";
+    symbol = "unlock";
+  } else if (!hasChannel) {
+    label = "Connect a channel";
+    destination = "connections";
+    symbol = "link";
+  } else if (!contentStorageConfigured) {
+    label = "View media setup";
+    destination = "setup";
+    symbol = "alert";
+  } else if (!hasMedia) {
+    label = "Add media";
+    destination = "upload";
+    symbol = "upload";
   }
-  $("#workflow-status").textContent = status;
-  $("#workflow-description").textContent = description;
-  const states = {
-    channels: !authenticated ? "upcoming" : hasChannel ? "complete" : "current",
-    media: hasChannel ? (hasMedia ? "complete" : "current") : "upcoming",
-    publish: hasMedia ? "current" : "upcoming",
-  };
-  $("#workflow-card").hidden = hasChannel;
-  document.querySelectorAll("[data-flow-step]").forEach((step, index) => {
-    const state = states[step.dataset.flowStep];
-    step.dataset.flowState = state;
-    step.querySelector(".flow-number").textContent = state === "complete" ? "✓" : String(index + 1);
-    if (state === "current") step.setAttribute("aria-current", "step");
-    else step.removeAttribute("aria-current");
-  });
+  button.querySelector("span").textContent = label;
+  button.querySelector("use").setAttribute("href", `#i-${symbol}`);
+  button.dataset.nextAction = destination;
   renderOverview();
 }

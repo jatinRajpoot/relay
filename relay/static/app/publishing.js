@@ -1,5 +1,7 @@
 "use strict";
 
+let activePublishDraft = null;
+
 function formatStatusTime(value) {
   if (!value) return null;
   return new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
@@ -107,7 +109,7 @@ function renderPublishResults() {
       link.href = result.url;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
-      link.textContent = "Open video ↗";
+      link.textContent = "Open video";
       row.append(copy, link);
     } else {
       row.append(copy);
@@ -135,6 +137,8 @@ $("#publish-form").addEventListener("submit", async (event) => {
   if (!item || !selected.length) { notice("Choose a media preview and at least one destination profile first.", true); return; }
   if (youtubeAccounts.length && !$("#youtube-publish-title").value.trim()) { notice("YouTube needs a video title before upload.", true); return; }
 
+  saveLocalDraft({ announce: false });
+  activePublishDraft = readLocalDraft();
   activeInstagramPosts = [];
   youtubeUploadResults = [];
   publishing = true;
@@ -186,14 +190,11 @@ $("#publish-form").addEventListener("submit", async (event) => {
   if (youtubeUploadResults.some((result) => result.url)) await loadPostHistory();
   const successful = activeInstagramPosts.filter((post) => post.id).length + youtubeUploadResults.filter((result) => result.url).length;
   const failures = activeInstagramPosts.filter((post) => post.status === "failed").length + youtubeUploadResults.filter((result) => result.error).length;
-  if (successful) {
-    try { localStorage.removeItem(localDraftKey()); } catch { /* The published post is already recorded. */ }
-    $("#draft-status").textContent = "";
-    if (historyLoaded) renderPostHistory();
-  }
+  if (successful && !failures && !instagramAccounts.length) clearPublishedDraft(activePublishDraft);
   if (failures) setComposerProgress("Some destinations need attention", `${successful} of ${selected.length} destinations accepted the post. Review the status for each destination below.`);
   else if (instagramAccounts.length) setComposerProgress("Instagram is checking your media", "Not published yet. This area refreshes automatically about once a minute; when ready, choose Publish ready posts.");
   else setComposerProgress("YouTube upload complete", "Your upload is complete. Open the video below to view it.");
+  if (activeInstagramPosts.length && activeInstagramPosts.every((post) => post.status === "published") && !youtubeUploadResults.some((result) => result.error)) clearPublishedDraft(activePublishDraft);
   scheduleInstagramStatusCheck();
 });
 
@@ -205,6 +206,7 @@ $("#publish-new-post").addEventListener("click", () => {
   activeDetailsTab = "master";
   activeInstagramPosts = [];
   youtubeUploadResults = [];
+  activePublishDraft = null;
   $("#publish-caption").value = "";
   $("#caption-count").textContent = "0";
   $("#youtube-publish-title").value = "";
@@ -263,6 +265,7 @@ async function checkInstagramStatuses() {
   if (newlyPublished) await loadPostHistory();
   if (activeInstagramPosts.some((post) => post.status === "ready")) setComposerProgress("Instagram is ready to publish", "This post is not live yet. Choose Publish ready posts when you want to make it live.");
   if (activeInstagramPosts.length && activeInstagramPosts.every((post) => ["published", "failed", "expired"].includes(post.status))) setComposerProgress("Instagram status confirmed", "Each destination now shows its final publishing result below.");
+  if (activeInstagramPosts.length && activeInstagramPosts.every((post) => post.status === "published") && !youtubeUploadResults.some((result) => result.error)) clearPublishedDraft(activePublishDraft);
   renderPublishResults();
   scheduleInstagramStatusCheck();
 }
@@ -299,6 +302,7 @@ $("#instagram-publish-ready").addEventListener("click", async () => {
   if (activeInstagramPosts.every((post) => post.status === "published" || post.status === "failed" || post.status === "expired")) {
     setComposerProgress("Instagram publishing complete", "Your final post statuses are shown below.");
   }
+  if (activeInstagramPosts.length && activeInstagramPosts.every((post) => post.status === "published") && !youtubeUploadResults.some((result) => result.error)) clearPublishedDraft(activePublishDraft);
   if (activeInstagramPosts.some((post) => post.status === "published")) await loadPostHistory();
   scheduleInstagramStatusCheck();
 });

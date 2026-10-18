@@ -4,10 +4,8 @@ const signup = window.location.pathname === "/signup";
 const $ = (selector) => document.querySelector(selector);
 if (signup) {
   document.title = "Create an account · Relay";
-  $("#auth-kicker").textContent = "MAKE YOURSELF AT HOME";
   $("#auth-title").textContent = "Start your next chapter.";
-  $("#auth-description").textContent = "Create an account and your first workspace.";
-  $("#account-submit").textContent = "Create account ↗";
+  $("#account-submit").textContent = "Create account";
   $("#switch-prompt").textContent = "Already have an account?";
   $("#switch-link").textContent = "Log in";
   $("#switch-link").href = "/login";
@@ -39,10 +37,19 @@ $("#account-form").addEventListener("submit", async (event) => {
     }
     window.location.replace("/app");
   } catch (failure) {
-    error.textContent = failure instanceof TypeError ? "Couldn’t reach Relay. Please try again." : failure.message;
+    error.replaceChildren();
+    const message = document.createElement("span");
+    message.textContent = failure instanceof TypeError
+      ? "Couldn’t reach Relay. Your details are still here."
+      : failure.message;
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.textContent = "Retry now";
+    retry.addEventListener("click", () => $("#account-form").requestSubmit());
+    error.append(message, retry);
     error.hidden = false;
   } finally {
     button.disabled = false;
-    button.textContent = signup ? "Create account ↗" : "Log in ↗";
+    button.textContent = signup ? "Create account" : "Log in";
   }
 });

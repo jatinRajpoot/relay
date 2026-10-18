@@ -3,8 +3,6 @@
 function renderOverview() {
   const primaryAction = $("#overview-primary-action");
   if (!primaryAction) return;
-  primaryAction.querySelector("span").textContent = authenticated ? "Create a post" : "Unlock workspace";
-  primaryAction.querySelector("use").setAttribute("href", authenticated ? "#i-plus" : "#i-lock");
   $("#overview-channel-count").textContent = authenticated ? String(accountList.length) : "—";
   $("#overview-media-count").textContent = authenticated ? String(contentItems.length) : "—";
   const publishedCount = $("#overview-history-count");
@@ -13,24 +11,6 @@ function renderOverview() {
       ? String(postHistory.length)
       : "—";
   }
-  let readiness = "Your workspace awaits";
-  let readinessDetail = "Unlock once to see your channels and media";
-  if (authenticated && !accountList.length) {
-    readiness = "Set up channels";
-    readinessDetail = "Connect Instagram or YouTube";
-  } else if (authenticated && !contentStorageConfigured) {
-    readiness = "Setup needed";
-    readinessDetail = "Configure media storage to upload";
-  } else if (authenticated && !contentItems.length) {
-    readiness = "Add media";
-    readinessDetail = "Your channels are ready for content";
-  } else if (authenticated) {
-    readiness = "Ready to create";
-    readinessDetail = "Choose a channel and publish";
-  }
-  $("#overview-readiness").textContent = readiness;
-  $("#overview-readiness-detail").textContent = readinessDetail;
-
   const channelList = $("#overview-channel-list");
   channelList.replaceChildren();
   if (!authenticated || !accountList.length) {
@@ -46,10 +26,8 @@ function renderOverview() {
     icon.append(symbol);
     const copy = document.createElement("span");
     const title = document.createElement("strong");
-    const detail = document.createElement("small");
     title.textContent = authenticated ? "No channels connected" : "Unlock your workspace";
-    detail.textContent = authenticated ? "Connect a channel to start publishing." : "Your connected channels will show up here.";
-    copy.append(title, detail);
+    copy.append(title);
     empty.append(icon, copy);
     channelList.append(empty);
     const action = document.createElement("button");
@@ -91,27 +69,6 @@ function renderOverview() {
     }
   }
 
-  const mediaList = $("#overview-media-list");
-  const mediaEmpty = $("#overview-media-empty");
-  mediaList.replaceChildren();
-  if (authenticated && contentStorageConfigured && contentItems.length) {
-    mediaEmpty.hidden = true;
-    mediaList.hidden = false;
-    for (const item of contentItems.slice(0, 4)) mediaList.append(makeOverviewMediaRow(item));
-  } else {
-    mediaEmpty.hidden = false;
-    mediaList.hidden = true;
-    if (!authenticated) {
-      $("#overview-media-empty-title").textContent = "Unlock to see your recent media.";
-      $("#overview-media-empty-description").textContent = "Your saved photos and videos will appear here.";
-    } else if (!contentStorageConfigured) {
-      $("#overview-media-empty-title").textContent = "Media storage needs setup.";
-      $("#overview-media-empty-description").textContent = "Configure media storage on the service to add photos and videos.";
-    } else {
-      $("#overview-media-empty-title").textContent = "Your media has a home here.";
-      $("#overview-media-empty-description").textContent = "Upload a photo or video and it’ll be ready whenever you create a post.";
-    }
-  }
 }
 
 function formattedMetric(value) {
@@ -123,8 +80,19 @@ function renderAnalytics() {
   if (!locked) return;
   locked.hidden = authenticated;
   $("#analytics-loading").hidden = !authenticated || !analyticsLoading;
-  $("#analytics-error").hidden = !authenticated || !analyticsError;
-  $("#analytics-error").textContent = analyticsError || "";
+  const error = $("#analytics-error");
+  error.hidden = !authenticated || !analyticsError;
+  error.replaceChildren();
+  if (analyticsError) {
+    const message = document.createElement("span");
+    message.textContent = `${analyticsError} Your channel data is unchanged.`;
+    const retry = document.createElement("button");
+    retry.className = "button button-ghost button-sm";
+    retry.type = "button";
+    retry.textContent = "Retry now";
+    retry.addEventListener("click", () => void loadAnalytics());
+    error.append(message, retry);
+  }
   const hasResult = Boolean(analyticsData);
   const hasAccounts = Boolean(analyticsData?.accounts?.length);
   $("#analytics-empty").hidden = !authenticated || analyticsLoading || Boolean(analyticsError) || !hasResult || hasAccounts;
@@ -289,27 +257,35 @@ async function loadAnalytics() {
 
 function setPage(page, { recordHistory = true } = {}) {
   if (!["overview", "analytics", "history", "connections", "content", "publish"].includes(page)) return;
-  activePage = page;
-  document.querySelectorAll("[data-page-view]").forEach((view) => {
-    view.hidden = view.dataset.pageView !== page;
-  });
-  document.querySelectorAll("[data-nav]").forEach((item) => {
-    const selected = item.dataset.nav === page;
-    if (item.classList.contains("nav-item")) item.classList.toggle("active", selected);
-    if (item.classList.contains("rail-create")) item.classList.toggle("active", selected);
-    if (item.matches("a")) {
-      if (selected && (item.classList.contains("nav-item") || item.classList.contains("nav-more-link") || item.classList.contains("rail-create"))) item.setAttribute("aria-current", "page");
-      else item.removeAttribute("aria-current");
+  const updatePage = () => {
+    activePage = page;
+    document.querySelectorAll("[data-page-view]").forEach((view) => {
+      view.hidden = view.dataset.pageView !== page;
+    });
+    document.querySelectorAll("[data-nav]").forEach((item) => {
+      const selected = item.dataset.nav === page;
+      if (item.classList.contains("nav-item")) item.classList.toggle("active", selected);
+      if (item.classList.contains("rail-create")) item.classList.toggle("active", selected);
+      if (item.matches("a")) {
+        if (selected && (item.classList.contains("nav-item") || item.classList.contains("nav-more-link") || item.classList.contains("rail-create"))) item.setAttribute("aria-current", "page");
+        else item.removeAttribute("aria-current");
+      }
+    });
+    const pageLabels = { overview: "Studio", analytics: "Insights", history: "Published", connections: "Channels", content: "Library", publish: "Create a post" };
+    $("#breadcrumb-label").textContent = pageLabels[page];
+    document.title = `${pageLabels[page]} · Relay`;
+    if (window.location.hash !== `#${page}`) {
+      const update = recordHistory ? "pushState" : "replaceState";
+      window.history[update]({}, "", `#${page}`);
     }
-  });
-  const pageLabels = { overview: "Studio", analytics: "Insights", history: "Published", connections: "Channels", content: "Library", publish: "Create a post" };
-  $("#breadcrumb-label").textContent = pageLabels[page];
-  document.title = `${pageLabels[page]} · Relay`;
-  if (window.location.hash !== `#${page}`) {
-    const update = recordHistory ? "pushState" : "replaceState";
-    window.history[update]({}, "", `#${page}`);
+    $("#main-content").scrollTop = 0;
+    if (page === "analytics") void loadAnalytics();
+    if (page === "history") void loadPostHistory();
+  };
+
+  if (activePage !== page && document.startViewTransition) {
+    document.startViewTransition(updatePage);
+  } else {
+    updatePage();
   }
-  $("#main-content").scrollTop = 0;
-  if (page === "analytics") void loadAnalytics();
-  if (page === "history") void loadPostHistory();
 }

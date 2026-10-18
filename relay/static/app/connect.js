@@ -1,8 +1,15 @@
 "use strict";
 
+function uploadRecovery(error, input, retry) {
+  if ([400, 413, 415, 422].includes(error.status)) {
+    return { label: "Choose another file", run: () => input.click() };
+  }
+  return { label: "Retry now", run: retry };
+}
+
 window.handleOAuthResult = async ({provider, result}) => {
   resetConnectButtons();
-  try { await loadAccounts(); } catch (error) { notice(error.message, true); return; }
+  try { await loadAccounts(); } catch (error) { notice(error.message, true, { label: "Retry now", run: () => $("#reload-accounts").click() }); return; }
   if (activePage === "analytics") await loadAnalytics();
   if (result === "connected") notice(`${names[provider]} connected. Your account is ready.`);
   else {
@@ -17,7 +24,7 @@ window.handleOAuthResult = async ({provider, result}) => {
 
 window.handleOAuthClosed = async () => {
   resetConnectButtons();
-  try { await loadAccounts(); } catch (error) { notice(error.message, true); return; }
+  try { await loadAccounts(); } catch (error) { notice(error.message, true, { label: "Retry now", run: () => $("#reload-accounts").click() }); return; }
   if (activePage === "analytics") await loadAnalytics();
   notice("Sign-in window closed. If the provider reported an invalid redirect URI, register the callback URL in the Setup guide. Otherwise, refresh the list after completing sign-in.");
 };
@@ -53,7 +60,7 @@ async function connect(provider, popupAlreadyOpen = false) {
     });
   } catch (error) {
     window.oauthPopup.close();
-    notice(error.message, true);
+    notice(error.message, true, { label: "Retry now", run: () => connect(provider) });
     if (!authenticated) showUnlock(provider);
     resetConnectButtons();
   }
@@ -120,6 +127,22 @@ async function uploadDroppedFile(file) {
     return;
   }
   if (!file) return;
+  if (maxUploadBytes > 0 && file.size > maxUploadBytes) {
+    const message = `${file.name} is ${formatBytes(file.size)}. Choose a file no larger than ${formatBytes(maxUploadBytes)}.`;
+    notice(message, true, {
+      label: "Choose another file",
+      run() {
+        if (activePage === "publish") {
+          $("#publish-file").click();
+          return;
+        }
+        setPage("content");
+        openContentUpload();
+        $("#content-file").click();
+      },
+    });
+    return;
+  }
   const form = new FormData();
   form.append("file", file);
   notice(`Adding ${file.name} to the media library…`);
@@ -131,7 +154,11 @@ async function uploadDroppedFile(file) {
       renderComposer();
     }
     notice("Media added to your library.");
-  } catch (error) { notice(error.message, true); }
+  } catch (error) {
+    notice(`${error.message} ${file.name} is still selected in this window.`, true, {
+      ...uploadRecovery(error, activePage === "publish" ? $("#publish-file") : $("#content-file"), () => uploadDroppedFile(file)),
+    });
+  }
 }
 
 let dragDepth = 0;
@@ -192,7 +219,17 @@ $("#publish-file").addEventListener("change", async (event) => {
   const status = $("#publish-upload-status");
   $("#publish-upload-name").textContent = file.name;
   status.hidden = false;
+  if (maxUploadBytes > 0 && file.size > maxUploadBytes) {
+    const message = `${file.name} is ${formatBytes(file.size)}. Choose a file no larger than ${formatBytes(maxUploadBytes)}.`;
+    status.textContent = message;
+    status.setAttribute("role", "alert");
+    $("#publish-file").setAttribute("aria-invalid", "true");
+    notice(message, true, { label: "Choose another file", run: () => $("#publish-file").click() });
+    return;
+  }
+  $("#publish-file").removeAttribute("aria-invalid");
   status.textContent = "Adding your file to the media library…";
+  status.setAttribute("role", "status");
   button.disabled = true;
   try {
     const form = new FormData();
@@ -203,10 +240,13 @@ $("#publish-file").addEventListener("change", async (event) => {
     renderComposer();
     status.textContent = "Added to your library.";
     $("#publish-file").value = "";
+    $("#publish-file").removeAttribute("aria-invalid");
     $("#publish-upload-name").textContent = "No file selected";
   } catch (error) {
-    status.textContent = error.message;
-    notice(error.message, true);
+    const message = `${error.message} ${file.name} is still selected.`;
+    status.textContent = message;
+    status.setAttribute("role", "alert");
+    notice(message, true, uploadRecovery(error, $("#publish-file"), () => $("#publish-file").dispatchEvent(new Event("change", { bubbles: true }))));
   } finally {
     button.disabled = false;
     syncPublishButtons();
@@ -218,8 +258,14 @@ $("#refresh-history").addEventListener("click", () => {
 });
 $("#history-unlock").addEventListener("click", () => showUnlock());
 $("#overview-primary-action").addEventListener("click", () => {
-  if (!authenticated) { showUnlock(); return; }
-  setPage("publish");
+  const destination = $("#overview-primary-action").dataset.nextAction;
+  if (destination === "unlock" || !authenticated) { showUnlock(); return; }
+  if (destination === "upload") {
+    setPage("content");
+    openContentUpload();
+    return;
+  }
+  setPage(destination === "setup" ? "content" : destination);
 });
 window.addEventListener("popstate", () => {
   const page = window.location.hash.slice(1);
@@ -303,11 +349,24 @@ $("#reload-accounts").addEventListener("click", async () => {
   const button = $("#reload-accounts");
   button.disabled = true;
   try { await loadAccounts(); notice("Your connections are up to date."); }
-  catch (error) { notice(error.message, true); }
+  catch (error) { notice(error.message, true, { label: "Retry now", run: () => $("#reload-accounts").click() }); }
   finally { button.disabled = false; }
 });
 
 $("#content-empty-action").addEventListener("click", () => {
+  if (!authenticated) { showUnlock(); return; }
+  if (!contentStorageConfigured) {
+    const copied = navigator.clipboard?.writeText("INSTAGRAM_MEDIA_BUCKET");
+    if (!copied) {
+      notice("Set INSTAGRAM_MEDIA_BUCKET on the Relay service, then refresh this page.", true);
+      return;
+    }
+    copied.then(
+      () => notice("Copied INSTAGRAM_MEDIA_BUCKET. Set it on the Relay service, then refresh this page."),
+      () => notice("Set INSTAGRAM_MEDIA_BUCKET on the Relay service, then refresh this page.", true),
+    );
+    return;
+  }
   openContentUpload();
 });
 
@@ -316,23 +375,36 @@ $("#content-upload-form").addEventListener("submit", async (event) => {
   if (!authenticated) { showUnlock(); return; }
   const file = $("#content-file").files[0];
   if (!file) { notice("Choose a photo or video to upload.", true); return; }
+  if (maxUploadBytes > 0 && file.size > maxUploadBytes) {
+    const message = `${file.name} is ${formatBytes(file.size)}. Choose a file no larger than ${formatBytes(maxUploadBytes)}.`;
+    $("#content-upload-status").textContent = message;
+    $("#content-upload-status").setAttribute("role", "alert");
+    $("#content-file").setAttribute("aria-invalid", "true");
+    notice(message, true, { label: "Choose another file", run: () => $("#content-file").click() });
+    return;
+  }
+  $("#content-file").removeAttribute("aria-invalid");
   const button = $("#content-upload-submit");
   button.disabled = true;
   button.querySelector("span").textContent = "Uploading…";
   $("#content-upload-status").textContent = "Saving your media to the content library…";
+  $("#content-upload-status").setAttribute("role", "status");
   try {
     const form = new FormData();
     form.append("file", file);
     await api("/content", { method: "POST", body: form });
     $("#content-file").value = "";
+    $("#content-file").removeAttribute("aria-invalid");
     $("#content-file-name").textContent = "No file selected";
     await loadContent();
     $("#content-upload-status").textContent = "Content uploaded and ready to publish.";
     $("#upload-dialog").close();
     notice("Content added to your library.");
   } catch (error) {
-    $("#content-upload-status").textContent = error.message;
-    notice(error.message, true);
+    const message = `${error.message} ${file.name} is still selected.`;
+    $("#content-upload-status").textContent = message;
+    $("#content-upload-status").setAttribute("role", "alert");
+    notice(message, true, uploadRecovery(error, $("#content-file"), () => $("#content-upload-form").requestSubmit()));
   } finally {
     button.querySelector("span").textContent = "Upload media";
     syncPublishButtons();
@@ -344,7 +416,7 @@ $("#reload-content").addEventListener("click", async () => {
   const button = $("#reload-content");
   button.disabled = true;
   try { await loadContent(); notice("Your content library is up to date."); }
-  catch (error) { notice(error.message, true); }
+  catch (error) { notice(error.message, true, { label: "Retry now", run: () => $("#reload-content").click() }); }
   finally { button.disabled = false; }
 });
 
@@ -352,15 +424,17 @@ $("#publish-caption").addEventListener("input", (event) => {
   $("#caption-count").textContent = String(event.target.value.length);
   if (activeDetailsTab !== "youtube") renderComposerDetails();
   renderComposerPreview();
+  scheduleDraftSave();
 });
 $("#youtube-publish-title").addEventListener("input", () => {
   syncPublishButtons();
   if (activeDetailsTab === "youtube") renderComposerDetails();
   renderComposerPreview();
+  scheduleDraftSave();
 });
-$("#youtube-publish-description").addEventListener("input", () => { syncPublishButtons(); renderComposerPreview(); });
-$("#youtube-publish-privacy").addEventListener("change", syncPublishButtons);
-$("#youtube-made-for-kids").addEventListener("change", syncPublishButtons);
+$("#youtube-publish-description").addEventListener("input", () => { syncPublishButtons(); renderComposerPreview(); scheduleDraftSave(); });
+$("#youtube-publish-privacy").addEventListener("change", () => { syncPublishButtons(); scheduleDraftSave(); });
+$("#youtube-made-for-kids").addEventListener("change", () => { syncPublishButtons(); scheduleDraftSave(); });
 
 $("#confirm-disconnect").addEventListener("click", async () => {
   if (!disconnecting) return;
@@ -374,6 +448,6 @@ $("#confirm-disconnect").addEventListener("click", async () => {
     disconnecting = null;
   } catch (error) {
     $("#disconnect-dialog").close();
-    notice(error.message, true);
+    notice(error.message, true, { label: "Check channels", run: () => $("#reload-accounts").click() });
   } finally { button.disabled = false; }
 });

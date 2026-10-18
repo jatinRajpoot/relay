@@ -3,6 +3,7 @@
 function renderContent() {
   const list = $("#content-list");
   const empty = $("#content-empty");
+  const description = $("#content-empty-description");
   list.replaceChildren();
   $("#content-count").textContent = authenticated ? String(contentItems.length) : "—";
   $("#content-nav-count").textContent = authenticated ? String(contentItems.length) : "—";
@@ -10,40 +11,48 @@ function renderContent() {
   if (!authenticated) {
     $("#content-empty-action").hidden = false;
     $("#content-empty-title").textContent = "Unlock your workspace to view content.";
-    $("#content-empty-description").textContent = "Your saved photos and videos are available after you unlock.";
+    description.hidden = true;
     $("#content-empty-action").textContent = "Unlock workspace";
     empty.hidden = false;
     list.hidden = true;
-    $("#content-storage-hint").textContent = "Unlock your workspace before uploading content.";
+    $("#content-storage-hint").textContent = "";
+    $("#content-storage-hint").hidden = true;
     return;
   }
   if (!contentStorageConfigured) {
     $("#content-empty-title").textContent = "Media storage isn't configured.";
-    $("#content-empty-description").textContent = "Set INSTAGRAM_MEDIA_BUCKET on the service to enable content uploads.";
-    $("#content-empty-action").hidden = true;
+    description.textContent = "Set INSTAGRAM_MEDIA_BUCKET on the service to enable uploads.";
+    description.hidden = false;
+    $("#content-empty-action").hidden = false;
+    $("#content-empty-action").textContent = "Copy setting name";
     empty.hidden = false;
     list.hidden = true;
-    $("#content-storage-hint").textContent = "Set INSTAGRAM_MEDIA_BUCKET to enable uploads.";
+    $("#content-storage-hint").textContent = "";
+    $("#content-storage-hint").hidden = true;
     return;
   }
   $("#content-empty-action").hidden = false;
-  $("#content-storage-hint").textContent = `JPEG photos and videos up to ${formatBytes(maxUploadBytes)} each.`;
+  $("#content-storage-hint").textContent = maxUploadBytes > 0
+    ? `JPEG photos and videos up to ${formatBytes(maxUploadBytes)} each.`
+    : "JPEG photos and videos.";
+  $("#content-storage-hint").hidden = false;
   if (!contentItems.length) {
-    $("#content-empty-title").textContent = "Your media will appear here.";
-    $("#content-empty-description").textContent = "Upload a photo or video to get started.";
+    $("#content-empty-title").textContent = "No media yet";
+    description.hidden = true;
     $("#content-empty-action").textContent = "Upload media";
     empty.hidden = false;
     list.hidden = true;
     return;
   }
+  description.hidden = true;
   empty.hidden = true;
   list.hidden = false;
   for (const item of contentItems) list.append(makeMediaCard(item));
 }
 
-function makeMediaCard(item, { compact = false } = {}) {
+function makeMediaCard(item) {
   const card = document.createElement("article");
-  card.className = compact ? "media-card overview-media-card" : "media-card";
+  card.className = "media-card";
   const preview = document.createElement("div");
   preview.className = "media-preview";
   if (item.content_type.startsWith("image/")) {
@@ -55,7 +64,7 @@ function makeMediaCard(item, { compact = false } = {}) {
   } else {
     const video = document.createElement("video");
     video.src = item.media_url;
-    video.controls = !compact;
+    video.controls = true;
     video.preload = "metadata";
     video.playsInline = true;
     preview.append(video);
@@ -79,33 +88,6 @@ function makeMediaCard(item, { compact = false } = {}) {
   details.append(filename, metadata);
   card.append(preview, details);
   return card;
-}
-
-function makeOverviewMediaRow(item) {
-  const row = document.createElement("button");
-  row.type = "button";
-  row.className = "overview-media-tile";
-  const preview = document.createElement("span");
-  preview.className = "overview-media-thumb";
-  const node = document.createElement(item.content_type.startsWith("image/") ? "img" : "video");
-  node.src = item.media_url;
-  node.alt = "";
-  if (node instanceof HTMLVideoElement) {
-    node.muted = true;
-    node.preload = "metadata";
-    node.playsInline = true;
-  }
-  preview.append(node);
-  const copy = document.createElement("span");
-  copy.className = "overview-media-copy";
-  const title = document.createElement("strong");
-  title.textContent = item.filename;
-  const meta = document.createElement("small");
-  meta.textContent = mediaKind(item) + " · " + formatBytes(item.size);
-  copy.append(title, meta);
-  row.append(preview, copy);
-  row.addEventListener("click", () => setPage("content"));
-  return row;
 }
 
 function makeMediaTag(label, platform) {
@@ -132,7 +114,17 @@ function readLocalDraft() {
   } catch { return null; }
 }
 
-function saveLocalDraft() {
+let draftSaveTimer = null;
+
+function scheduleDraftSave() {
+  window.clearTimeout(draftSaveTimer);
+  $("#draft-status").textContent = "Saving…";
+  draftSaveTimer = window.setTimeout(() => saveLocalDraft({ announce: false }), 350);
+}
+
+function saveLocalDraft({ announce = true } = {}) {
+  window.clearTimeout(draftSaveTimer);
+  const savedAt = Date.now();
   const draft = {
     caption: $("#publish-caption").value,
     title: $("#youtube-publish-title").value,
@@ -141,17 +133,47 @@ function saveLocalDraft() {
     madeForKids: $("#youtube-made-for-kids").checked,
     selectedContentId,
     selectedAccountIds: [...selectedAccountIds],
-    savedAt: Date.now(),
+    savedAt,
   };
   try {
     localStorage.setItem(localDraftKey(), JSON.stringify(draft));
-    $("#draft-status").textContent = "Saved";
+    $("#draft-status").textContent = `Saved ${new Date(savedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
     if (historyLoaded) renderPostHistory();
-    notice("Draft saved in this browser.");
+    if (announce) notice("Draft saved in this browser.");
   } catch {
-    $("#draft-status").textContent = "Could not save";
-    notice("The draft could not be saved in this browser.", true);
+    $("#draft-status").textContent = "Draft not saved";
+    if (announce) notice("Your draft could not be saved in this browser. Check browser storage and try again.", true);
   }
+}
+
+function clearPublishedDraft(expectedDraft) {
+  if (!expectedDraft) return;
+  const currentDraft = readLocalDraft();
+  if (!currentDraft || JSON.stringify(currentDraft) !== JSON.stringify(expectedDraft)) return;
+  try {
+    localStorage.removeItem(localDraftKey());
+  } catch {
+    return;
+  }
+  $("#draft-status").textContent = "";
+  if (historyLoaded) renderPostHistory();
+  notice("All destinations published. The saved draft was cleared.", false, {
+    label: "Undo",
+    run() {
+      if (readLocalDraft()) {
+        notice("A newer draft is already saved, so it was left unchanged.");
+        return;
+      }
+      try {
+        localStorage.setItem(localDraftKey(), JSON.stringify(expectedDraft));
+        restoreLocalDraft(expectedDraft);
+        if (historyLoaded) renderPostHistory();
+        notice("Draft restored.");
+      } catch {
+        notice("The draft could not be restored in this browser.", true);
+      }
+    },
+  });
 }
 
 function restoreLocalDraft(draft = readLocalDraft()) {
