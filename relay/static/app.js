@@ -939,11 +939,11 @@ function syncPublishButtons() {
     status.textContent = "YouTube requires a title before this video can be uploaded.";
   } else if (hasResults) {
     statusTitle.textContent = "Review your post status";
-    status.textContent = "The destination list below shows whether each post is processing, ready, or confirmed published.";
+    status.textContent = "The destination list shows each post's processing and publishing status.";
   } else {
     statusTitle.textContent = hasInstagram ? "Ready to send to Instagram" : "Ready to upload";
     status.textContent = hasInstagram
-      ? "Instagram checks the media first. It is not live until the status below says Published."
+      ? "Relay publishes automatically after Instagram finishes checking the media."
       : `This ${mediaKind(item).toLowerCase()} is ready for ${selected.length} selected ${selected.length === 1 ? "channel" : "channels"}.`;
   }
 }
@@ -1123,7 +1123,7 @@ function renderOverviewPosts() {
   if (!authenticated) { container.append(note("Unlock to see your publishing activity.")); return; }
   if (historyError) { container.append(note(historyError)); return; }
   if (!historyLoaded || historyLoading) { container.append(note("Loading recent activity…")); return; }
-  if (!postHistory.length) { container.append(note("Nothing published yet.")); return; }
+  if (!postHistory.length) { container.append(note("No posts yet.")); return; }
   for (const post of postHistory.slice(0, 3)) {
     const row = document.createElement("button");
     row.type = "button";
@@ -1139,12 +1139,26 @@ function renderOverviewPosts() {
     const meta = document.createElement("small");
     const when = new Date(Number(post.published_at) * 1000)
       .toLocaleDateString(undefined, { month: "short", day: "numeric" });
-    meta.textContent = `${names[post.provider]} · ${when}`;
+    const status = post.status || "published";
+    meta.textContent = `${names[post.provider]} · ${when}${status === "published" ? "" : ` · ${historyStatusLabel(status)}`}`;
     copy.append(title, meta);
     row.append(badge, copy);
     row.addEventListener("click", () => setPage("history"));
     container.append(row);
   }
+}
+
+function historyStatusLabel(status) {
+  const labels = {
+    processing: "Processing",
+    ready: "Ready · auto publishing",
+    publishing: "Publishing",
+    published: "Published",
+    failed: "Failed",
+    expired: "Expired",
+    unknown: "Needs confirmation",
+  };
+  return labels[status] || "Queued";
 }
 
 function renderPostHistory() {
@@ -1249,6 +1263,11 @@ function renderPostHistory() {
       month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
     });
     meta.append(date);
+    const status = post.status || "published";
+    const statusBadge = document.createElement("span");
+    statusBadge.className = `history-status ${status}`;
+    statusBadge.textContent = historyStatusLabel(status);
+    meta.append(statusBadge);
     if (post.visibility) {
       const visibility = document.createElement("span");
       visibility.className = "history-visibility";
@@ -1264,34 +1283,47 @@ function renderPostHistory() {
       link.textContent = "Open video";
       meta.append(link);
     }
+    if (post.error) {
+      const error = document.createElement("small");
+      error.className = "publish-result-error";
+      error.textContent = post.error;
+      meta.append(error);
+    }
     row.append(preview, copy, meta);
     list.append(row);
   }
 }
 
-async function loadPostHistory() {
+async function loadPostHistory({ quiet = false } = {}) {
   if (!authenticated) {
     historyRequestId += 1;
     postHistory = [];
     historyLoading = false;
     historyLoaded = false;
     historyError = null;
+    scheduleInstagramStatusCheck();
     renderPostHistory();
     return;
   }
   const requestId = ++historyRequestId;
-  historyLoading = true;
-  historyError = null;
-  renderPostHistory();
+  if (!quiet) {
+    historyLoading = true;
+    historyError = null;
+    renderPostHistory();
+  }
   try {
     const result = await api("/posts");
     if (requestId !== historyRequestId || !authenticated) return;
     postHistory = result.posts;
     historyLoaded = true;
+    historyError = null;
+    scheduleInstagramStatusCheck();
   } catch (error) {
     if (requestId !== historyRequestId || !authenticated) return;
-    historyError = error.message;
-    historyLoaded = authenticated;
+    if (!quiet || !historyLoaded) {
+      historyError = error.message;
+      historyLoaded = authenticated;
+    }
   } finally {
     if (requestId === historyRequestId) {
       historyLoading = false;
@@ -1584,7 +1616,7 @@ function statusText(status, post) {
   const publishedTime = formatStatusTime(post.updatedAt);
   const labels = {
     processing: "Not published yet · Instagram is checking this media.",
-    ready: "Not live yet · Instagram is ready for you to publish.",
+    ready: "Instagram is ready · Relay is publishing it automatically.",
     publishing: "Sending the publish request · waiting for Instagram to confirm.",
     published: publishedTime ? `Published on Instagram · confirmed at ${publishedTime}.` : "Published on Instagram · confirmed live.",
     failed: "Not published · Instagram returned an error for this destination.",
@@ -1612,7 +1644,7 @@ function renderInstagramStatusSummary() {
   const messages = [];
   if (published) messages.push("Instagram confirmed " + published + " of " + posts.length + " destination" + (posts.length === 1 ? "" : "s") + " published.");
   if (processing) messages.push(processing + " Instagram post" + (processing === 1 ? " is" : "s are") + " still processing and not published yet. Status refreshes automatically every minute.");
-  if (ready) messages.push(ready + " Instagram post" + (ready === 1 ? " is" : "s are") + " ready to publish, but not live yet. Choose “Publish ready posts” to publish.");
+  if (ready) messages.push(ready + " Instagram post" + (ready === 1 ? " is" : "s are") + " ready. Relay is publishing automatically.");
   if (publishing) messages.push(publishing + " publish request" + (publishing === 1 ? " is" : "s are") + " waiting for Instagram confirmation.");
   if (unknown) messages.push(unknown + " status" + (unknown === 1 ? " is" : "es are") + " unclear. Check Instagram before retrying.");
   if (failed) messages.push(failed + " destination" + (failed === 1 ? " needs" : "s need") + " attention.");
@@ -1626,14 +1658,12 @@ function renderPublishResults() {
   list.replaceChildren();
   const results = [...activeInstagramPosts, ...youtubeUploadResults];
   section.hidden = results.length === 0;
-  const checkablePosts = activeInstagramPosts.filter((post) => ["processing", "unknown", "publishing"].includes(post.status));
+  const checkablePosts = activeInstagramPosts.filter((post) => ["processing", "ready", "unknown", "publishing"].includes(post.status));
   const checkDue = checkablePosts.some((post) => !post.nextCheckAt || post.nextCheckAt <= Date.now());
-  const ready = activeInstagramPosts.some((post) => post.status === "ready");
   const checkButton = $("#instagram-check-all");
   checkButton.hidden = !checkablePosts.length;
   checkButton.disabled = instagramStatusCheckRunning || !checkDue;
   checkButton.textContent = checkDue ? "Check status now" : "Checking again automatically";
-  $("#instagram-publish-ready").hidden = !ready;
   renderInstagramStatusSummary();
   for (const result of activeInstagramPosts) {
     const row = document.createElement("article");
@@ -1660,7 +1690,7 @@ function renderPublishResults() {
     }
     const badge = document.createElement("span");
     badge.className = "result-status-badge";
-    const badges = { processing: "Checking", ready: "Ready · not live", publishing: "Publishing", published: "Published", failed: "Failed", expired: "Expired", unknown: "Verify status" };
+    const badges = { processing: "Checking", ready: "Auto publishing", publishing: "Publishing", published: "Published", failed: "Failed", expired: "Expired", unknown: "Verify status" };
     badge.textContent = result.checking ? "Checking…" : badges[result.status] || "Pending";
     row.append(copy, badge);
     list.append(row);
@@ -1732,6 +1762,7 @@ $("#publish-form").addEventListener("submit", async (event) => {
         updatedAt: Date.now(),
         nextCheckAt: ["processing", "unknown"].includes(status) ? Date.now() + 60_000 : null,
       });
+      void loadPostHistory();
     } catch (error) {
       activeInstagramPosts.push({ account, status: "failed", error: error.message });
     }
@@ -1762,14 +1793,12 @@ $("#publish-form").addEventListener("submit", async (event) => {
   const successful = activeInstagramPosts.filter((post) => post.id).length + youtubeUploadResults.filter((result) => result.url).length;
   const failures = activeInstagramPosts.filter((post) => post.status === "failed").length + youtubeUploadResults.filter((result) => result.error).length;
   if (failures) setComposerProgress("Some destinations need attention", `${successful} of ${selected.length} destinations accepted the post. Review the status for each destination below.`);
-  else if (instagramAccounts.length) setComposerProgress("Instagram is checking your media", "Not published yet. This area refreshes automatically about once a minute; when ready, choose Publish ready posts.");
+  else if (instagramAccounts.length) setComposerProgress("Instagram is checking your media", "Relay will publish automatically as soon as Instagram finishes processing. Status appears in History.");
   else setComposerProgress("YouTube upload complete", "Your upload is complete. Open the video below to view it.");
   scheduleInstagramStatusCheck();
 });
 
 $("#publish-new-post").addEventListener("click", () => {
-  if (instagramStatusTimer !== null) window.clearTimeout(instagramStatusTimer);
-  instagramStatusTimer = null;
   selectedContentId = null;
   selectedAccountIds.clear();
   composerStep = "media";
@@ -1783,15 +1812,61 @@ $("#publish-new-post").addEventListener("click", () => {
   $("#youtube-made-for-kids").checked = false;
   renderPublishResults();
   renderComposer();
+  scheduleInstagramStatusCheck();
   window.scrollTo({ top: 0, behavior: "smooth" });
 });
+
+function trackedInstagramPosts() {
+  const posts = new Map();
+  for (const history of postHistory) {
+    if (history.provider !== "instagram" || !history.instagram_post_id) continue;
+    posts.set(history.instagram_post_id, {
+      id: history.instagram_post_id,
+      status: history.status || "processing",
+      nextCheckAt: history.nextCheckAt || null,
+      history,
+      active: null,
+      checking: Boolean(history.checking),
+      error: history.error || null,
+      updatedAt: history.updatedAt || null,
+    });
+  }
+  for (const active of activeInstagramPosts) {
+    if (!active.id) continue;
+    const tracked = posts.get(active.id);
+    if (tracked) {
+      tracked.active = active;
+      tracked.status = active.status;
+      tracked.nextCheckAt = active.nextCheckAt || tracked.nextCheckAt;
+      tracked.checking = Boolean(active.checking);
+      tracked.error = active.error || null;
+      tracked.updatedAt = active.updatedAt || null;
+    } else {
+      posts.set(active.id, { ...active, history: null, active });
+    }
+  }
+  return [...posts.values()];
+}
+
+function updateTrackedInstagramPost(post, updates) {
+  Object.assign(post, updates);
+  if (post.active) Object.assign(post.active, updates);
+  if (post.history) {
+    for (const key of ["status", "checking", "error", "updatedAt", "nextCheckAt"]) {
+      if (Object.hasOwn(updates, key)) post.history[key] = updates[key];
+    }
+    if (updates.media_id) post.history.platform_post_id = updates.media_id;
+  }
+}
 
 function scheduleInstagramStatusCheck() {
   if (instagramStatusTimer !== null) window.clearTimeout(instagramStatusTimer);
   instagramStatusTimer = null;
-  const pending = activeInstagramPosts.filter((post) => post.id && ["processing", "unknown", "publishing"].includes(post.status));
-  if (!authenticated || !pending.length) return;
-  const dueAt = Math.min(...pending.map((post) => post.nextCheckAt || Date.now() + 60_000));
+  const checkable = trackedInstagramPosts().filter((post) =>
+    post.id && ["processing", "ready", "unknown", "publishing"].includes(post.status));
+  if (!authenticated || !checkable.length) return;
+  const dueAt = Math.min(...checkable.map((post) =>
+    post.status === "ready" ? Date.now() : post.nextCheckAt || Date.now() + 60_000));
   instagramStatusTimer = window.setTimeout(() => {
     instagramStatusTimer = null;
     void checkInstagramStatuses();
@@ -1799,8 +1874,11 @@ function scheduleInstagramStatusCheck() {
 }
 
 async function checkInstagramStatuses() {
-  if (instagramStatusCheckRunning) return;
-  const posts = activeInstagramPosts.filter((post) => post.id && ["processing", "unknown", "publishing"].includes(post.status) && (!post.nextCheckAt || post.nextCheckAt <= Date.now()));
+  if (!authenticated || instagramStatusCheckRunning) return;
+  const now = Date.now();
+  const posts = trackedInstagramPosts().filter((post) =>
+    post.id && (["ready"].includes(post.status) ||
+      (["processing", "unknown", "publishing"].includes(post.status) && (!post.nextCheckAt || post.nextCheckAt <= now))));
   if (!posts.length) {
     scheduleInstagramStatusCheck();
     renderPublishResults();
@@ -1808,70 +1886,71 @@ async function checkInstagramStatuses() {
   }
   instagramStatusCheckRunning = true;
   renderPublishResults();
+  renderPostHistory();
   let newlyPublished = false;
   for (const post of posts) {
-    post.checking = true;
-    post.error = null;
+    updateTrackedInstagramPost(post, { checking: true, error: null });
     renderPublishResults();
+    renderPostHistory();
     try {
-      const updated = await api(`/instagram/posts/${encodeURIComponent(post.id)}`);
-      newlyPublished ||= post.status !== "published" && updated.status === "published";
-      post.status = updated.status;
-      post.updatedAt = Date.now();
-      post.error = null;
-      post.checking = false;
-      post.nextCheckAt = ["processing", "unknown", "publishing"].includes(post.status) ? Date.now() + 60_000 : null;
+      if (post.status !== "ready") {
+        const previousStatus = post.status;
+        const updated = await api(`/instagram/posts/${encodeURIComponent(post.id)}`);
+        newlyPublished ||= previousStatus !== "published" && updated.status === "published";
+        updateTrackedInstagramPost(post, {
+          status: updated.status,
+          updatedAt: Date.now(),
+          media_id: updated.media_id,
+          nextCheckAt: ["processing", "unknown", "publishing"].includes(updated.status) ? Date.now() + 60_000 : null,
+        });
+      }
+      if (post.status === "ready") {
+        updateTrackedInstagramPost(post, { status: "publishing", updatedAt: Date.now(), nextCheckAt: null });
+        renderPublishResults();
+        renderPostHistory();
+        try {
+          const updated = await api(`/instagram/posts/${encodeURIComponent(post.id)}/publish`, { method: "POST" });
+          updateTrackedInstagramPost(post, {
+            status: updated.status,
+            updatedAt: Date.now(),
+            media_id: updated.media_id,
+            error: null,
+            nextCheckAt: ["processing", "unknown", "publishing"].includes(updated.status) ? Date.now() + 60_000 : null,
+          });
+          newlyPublished ||= updated.status === "published";
+        } catch (error) {
+          updateTrackedInstagramPost(post, {
+            status: "unknown",
+            error: error.message,
+            updatedAt: Date.now(),
+            nextCheckAt: Date.now() + 60_000,
+          });
+        }
+      }
+      updateTrackedInstagramPost(post, { checking: false });
     } catch (error) {
-      post.error = error.message;
-      post.checking = false;
-      post.updatedAt = Date.now();
-      post.nextCheckAt = Date.now() + 60_000;
+      updateTrackedInstagramPost(post, {
+        error: error.message,
+        checking: false,
+        updatedAt: Date.now(),
+        nextCheckAt: Date.now() + 60_000,
+      });
     }
     renderPublishResults();
+    renderPostHistory();
   }
   instagramStatusCheckRunning = false;
-  if (newlyPublished) await loadPostHistory();
-  if (activeInstagramPosts.some((post) => post.status === "ready")) setComposerProgress("Instagram is ready to publish", "This post is not live yet. Choose Publish ready posts when you want to make it live.");
-  if (activeInstagramPosts.length && activeInstagramPosts.every((post) => ["published", "failed", "expired"].includes(post.status))) setComposerProgress("Instagram status confirmed", "Each destination now shows its final publishing result below.");
+  if (newlyPublished) await loadPostHistory({ quiet: true });
+  if (activeInstagramPosts.some((post) => post.status === "published") &&
+      activeInstagramPosts.every((post) => ["published", "failed", "expired"].includes(post.status))) {
+    setComposerProgress("Instagram publishing complete", "Your final post statuses are shown in History.");
+  }
   renderPublishResults();
+  renderPostHistory();
   scheduleInstagramStatusCheck();
 }
 
 $("#instagram-check-all").addEventListener("click", () => void checkInstagramStatuses());
-
-$("#instagram-publish-ready").addEventListener("click", async () => {
-  const button = $("#instagram-publish-ready");
-  button.disabled = true;
-  publishing = true;
-  renderComposer();
-  for (const post of activeInstagramPosts.filter((item) => item.id && item.status === "ready")) {
-    post.status = "publishing";
-    post.updatedAt = Date.now();
-    post.error = null;
-    renderPublishResults();
-    try {
-      const updated = await api(`/instagram/posts/${encodeURIComponent(post.id)}/publish`, { method: "POST" });
-      post.status = updated.status;
-      post.updatedAt = Date.now();
-      post.error = null;
-    } catch (error) {
-      post.status = "unknown";
-      post.error = error.message;
-      post.updatedAt = Date.now();
-      post.nextCheckAt = Date.now() + 60_000;
-    }
-    renderPublishResults();
-  }
-  publishing = false;
-  renderComposer();
-  renderPublishResults();
-  button.disabled = false;
-  if (activeInstagramPosts.every((post) => post.status === "published" || post.status === "failed" || post.status === "expired")) {
-    setComposerProgress("Instagram publishing complete", "Your final post statuses are shown below.");
-  }
-  if (activeInstagramPosts.some((post) => post.status === "published")) await loadPostHistory();
-  scheduleInstagramStatusCheck();
-});
 
 /* ── Theme ─────────────────────────────────────────────────── */
 function applyTheme(theme) {
@@ -1896,7 +1975,7 @@ const paletteCommands = [
   { label: "Media library", hint: "Upload and reuse", icon: "media", group: "Go to", run: () => setPage("content") },
   { label: "Channels", hint: "Connect accounts", icon: "link", group: "Go to", run: () => setPage("connections") },
   { label: "Analytics", hint: "Performance", icon: "chart", group: "Go to", run: () => setPage("analytics") },
-  { label: "Post history", hint: "Everything published", icon: "history", group: "Go to", run: () => setPage("history") },
+  { label: "Post history", hint: "Recent posts and statuses", icon: "history", group: "Go to", run: () => setPage("history") },
   { label: "Toggle theme", hint: "⌘J", icon: "moon", group: "Actions", run: toggleTheme },
   { label: "Unlock workspace", hint: "Enter service key", icon: "lock", group: "Actions", run: () => showUnlock() },
   { label: "Lock workspace", hint: "Sign out of this browser", icon: "lock", group: "Actions", run: () => lockWorkspace() },

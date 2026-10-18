@@ -408,10 +408,51 @@ class Store:
                 dict(row)
                 for row in db.execute(
                     """
-                    SELECT history.*, accounts.name AS account_name
-                    FROM post_history AS history
-                    JOIN accounts ON accounts.id=history.account_id
-                    ORDER BY history.published_at DESC, history.id DESC
+                    WITH history_items AS (
+                        SELECT
+                            'instagram-' || posts.id AS id,
+                            'instagram' AS provider,
+                            posts.account_id,
+                            COALESCE(posts.media_id, posts.container_id) AS platform_post_id,
+                            NULL AS title,
+                            COALESCE(posts.caption, '') AS caption,
+                            NULL AS media_name,
+                            posts.media_type,
+                            posts.media_url,
+                            NULL AS post_url,
+                            NULL AS visibility,
+                            COALESCE(history.published_at, posts.created_at) AS published_at,
+                            posts.status,
+                            posts.id AS instagram_post_id,
+                            accounts.name AS account_name
+                        FROM instagram_posts AS posts
+                        JOIN accounts ON accounts.id=posts.account_id
+                        LEFT JOIN post_history AS history ON history.id=('instagram-' || posts.id)
+
+                        UNION ALL
+
+                        SELECT
+                            history.id,
+                            history.provider,
+                            history.account_id,
+                            history.platform_post_id,
+                            history.title,
+                            history.caption,
+                            history.media_name,
+                            history.media_type,
+                            history.media_url,
+                            history.post_url,
+                            history.visibility,
+                            history.published_at,
+                            'published' AS status,
+                            NULL AS instagram_post_id,
+                            accounts.name AS account_name
+                        FROM post_history AS history
+                        JOIN accounts ON accounts.id=history.account_id
+                        WHERE history.provider='youtube'
+                    )
+                    SELECT * FROM history_items
+                    ORDER BY published_at DESC, id DESC
                     LIMIT ?
                     """,
                     (limit,),
