@@ -134,6 +134,9 @@ def create_app(settings: Settings | None = None, transport=None):
         if request.headers.get("origin") != f"{expected.scheme}://{expected.netloc}":
             raise HTTPException(403, "Open this workspace at its configured BASE_URL to continue.")
 
+    def client_address(request):
+        return request.client.host if request.client else "unknown"
+
     @app.middleware("http")
     async def response_security(request: Request, call_next):
         # Reject declared oversized requests before multipart parsing/spooling.
@@ -256,10 +259,15 @@ def create_app(settings: Settings | None = None, transport=None):
     @app.post("/auth/signup", tags=["Account"], status_code=201)
     async def signup(body: SignupRequest, request: Request, response: Response):
         same_origin(request)
-        identity.throttle(request.client.host if request.client else "unknown", body.email)
-        user_id, workspace_id = identity.signup(
-            body.email, body.password, body.name, body.workspace_name
-        )
+        address = client_address(request)
+        identity.throttle(address, body.email)
+        try:
+            user_id, workspace_id = identity.signup(
+                body.email, body.password, body.name, body.workspace_name
+            )
+        except HTTPException:
+            identity.record_failure(address, body.email)
+            raise
         set_session(response, identity.new_session(
             user_id, workspace_id, request.cookies.get(session_cookie, "")
         ))
@@ -268,8 +276,13 @@ def create_app(settings: Settings | None = None, transport=None):
     @app.post("/auth/login", tags=["Account"])
     async def login(body: LoginRequest, request: Request, response: Response):
         same_origin(request)
-        identity.throttle(request.client.host if request.client else "unknown", body.email)
-        user_id, workspace_id = identity.login(body.email, body.password)
+        address = client_address(request)
+        identity.throttle(address, body.email)
+        try:
+            user_id, workspace_id = identity.login(body.email, body.password)
+        except HTTPException:
+            identity.record_failure(address, body.email)
+            raise
         set_session(response, identity.new_session(
             user_id, workspace_id, request.cookies.get(session_cookie, "")
         ))

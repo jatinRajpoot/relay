@@ -42,20 +42,30 @@ class Identity:
                 CREATE INDEX IF NOT EXISTS auth_attempt_bucket ON auth_attempts(bucket, created_at);
             """)
 
+    @staticmethod
+    def _buckets(address, email):
+        # A shared address gets a looser limit than a single email address.
+        return ((digest(f"ip:{address}"), 30), (digest(f"email:{email}"), 10))
+
     def throttle(self, address, email):
+        """Refuse a new attempt once this address or email has failed too often recently."""
         now = int(time.time())
-        buckets = [(digest(f"ip:{address}"), 30), (digest(f"email:{email}"), 10)]
         with self.store.connection() as db:
             db.execute("DELETE FROM auth_attempts WHERE created_at<?", (now - 900,))
-            for bucket, limit in buckets:
+            for bucket, limit in self._buckets(address, email):
                 count = db.execute(
                     "SELECT COUNT(*) FROM auth_attempts WHERE bucket=?", (bucket,)
                 ).fetchone()[0]
                 if count >= limit:
                     raise HTTPException(429, "Too many attempts. Try again in 15 minutes.")
+
+    def record_failure(self, address, email):
+        """Count a failed attempt. Successful sign-ins never consume the budget."""
+        now = int(time.time())
+        with self.store.connection() as db:
             db.executemany(
                 "INSERT INTO auth_attempts(bucket, created_at) VALUES (?, ?)",
-                [(bucket, now) for bucket, _ in buckets],
+                [(bucket, now) for bucket, _ in self._buckets(address, email)],
             )
 
     def signup(self, email, password, name, workspace_name):
