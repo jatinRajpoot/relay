@@ -161,6 +161,7 @@ window.initialize = async function initialize() {
     if (!authenticated) { window.location.replace("/login"); return; }
     activeWorkspaceId = state.workspace?.id || null;
     $("#workspace-tools").hidden = !state.user;
+    $("#workspace-select").replaceChildren();
     $("#account-label").textContent = state.user?.name || "Legacy workspace";
     $("#account-label").title = state.user?.email || "Service key access";
     for (const workspace of state.workspaces || []) {
@@ -199,6 +200,10 @@ window.initialize = async function initialize() {
     await loadAccounts();
     await loadContent();
     if (authenticated) await loadPostHistory();
+    adoptPreviewDraft();
+    restoreLocalDraft();
+    renderJourney();
+    $("#journey-recovery").hidden = true;
     if (activePage === "analytics") await loadAnalytics();
     const params = new URLSearchParams(window.location.search);
     const connected = params.get("connected");
@@ -212,5 +217,8 @@ window.initialize = async function initialize() {
       notice(messages[error] || "We couldn't finish connecting. Check the setup guide and try again.", true);
     }
     if (connected || error) window.history.replaceState({}, "", "/");
-  } catch (error) { notice(error.message, true); }
+  } catch (error) {
+    showJourneyRecovery("Studio couldn't finish loading. Your draft is still here.", () => window.initialize());
+    notice(error.message, true);
+  }
 }

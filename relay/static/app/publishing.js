@@ -101,7 +101,7 @@ function renderPublishResults() {
     const name = document.createElement("strong");
     name.textContent = result.account.name;
     const description = document.createElement("small");
-    description.textContent = result.error || `Uploaded · ${result.privacyStatus || "private"}`;
+    description.textContent = result.uncertain ? `${result.error} Check YouTube Studio before sending again; the upload may have completed.` : result.error || `Uploaded · ${result.privacyStatus || "private"}`;
     copy.append(name, description);
     if (result.url) {
       const link = document.createElement("a");
@@ -117,18 +117,30 @@ function renderPublishResults() {
       badge.className = "result-status-badge";
       badge.textContent = "Failed";
       row.append(badge);
+      if (result.uncertain) {
+        const verify = document.createElement("a");
+        verify.className = "result-open-link";
+        verify.href = "https://studio.youtube.com";
+        verify.target = "_blank";
+        verify.rel = "noopener noreferrer";
+        verify.textContent = "Check YouTube Studio";
+        row.append(verify);
+      }
     }
     list.append(row);
   }
+  renderJourney();
 }
 
 function setComposerProgress(title, message) {
   $("#publish-results-title").textContent = title;
   $("#publish-results-title").nextElementSibling.textContent = message;
+  renderJourney();
 }
 
 $("#publish-form").addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (publishing || activeInstagramPosts.length || youtubeUploadResults.length) return;
   if (!authenticated) { showUnlock(); return; }
   const item = contentItems.find((content) => content.id === selectedContentId);
   const selected = accountList.filter((account) => selectedAccountIds.has(account.id));
@@ -180,7 +192,7 @@ $("#publish-form").addEventListener("submit", async (event) => {
       const uploaded = await api("/youtube/videos", { method: "POST", body: form });
       youtubeUploadResults.push({ account, url: uploaded.url, privacyStatus: uploaded.privacy_status });
     } catch (error) {
-      youtubeUploadResults.push({ account, error: error.message });
+      youtubeUploadResults.push({ account, error: error.message, uncertain: error.network || error.status >= 500 });
     }
     renderPublishResults();
   }
@@ -199,6 +211,13 @@ $("#publish-form").addEventListener("submit", async (event) => {
 });
 
 $("#publish-new-post").addEventListener("click", () => {
+  if (publishing || $("#publish-new-post").disabled) return;
+  saveLocalDraft({ announce: false });
+  const previous = readLocalDraft();
+  const editCopy = $("#publish-view").dataset.state !== "complete";
+  if (editCopy && previous) previous.selectedAccountIds = [...activeInstagramPosts, ...youtubeUploadResults]
+    .filter((result) => !result.url && result.status !== "published")
+    .map((result) => result.account.id);
   if (instagramStatusTimer !== null) window.clearTimeout(instagramStatusTimer);
   instagramStatusTimer = null;
   selectedContentId = null;
@@ -213,6 +232,9 @@ $("#publish-new-post").addEventListener("click", () => {
   $("#youtube-publish-description").value = "";
   $("#youtube-publish-privacy").value = "private";
   $("#youtube-made-for-kids").checked = false;
+  if (editCopy) restoreLocalDraft(previous);
+  saveLocalDraft({ announce: false });
+  notice(editCopy ? "Post copied for editing. Check any unconfirmed destination before sending again." : "A fresh post is ready.", false, { label: "Undo", run() { restoreLocalDraft(previous); saveLocalDraft({ announce: false }); } });
   renderPublishResults();
   renderComposer();
   $("#main-content").scrollTop = 0;

@@ -258,7 +258,9 @@ async function loadAnalytics() {
 function setPage(page, { recordHistory = true } = {}) {
   if (!["overview", "analytics", "history", "connections", "content", "publish"].includes(page)) return;
   const updatePage = () => {
+    if (activePage === "publish" && page !== "publish" && $("#publish-view").dataset.state !== "complete") saveLocalDraft({ announce: false });
     activePage = page;
+    document.body.dataset.page = page;
     document.querySelectorAll("[data-page-view]").forEach((view) => {
       view.hidden = view.dataset.pageView !== page;
     });
@@ -274,11 +276,16 @@ function setPage(page, { recordHistory = true } = {}) {
     const pageLabels = { overview: "Studio", analytics: "Insights", history: "Published", connections: "Channels", content: "Library", publish: "Create a post" };
     $("#breadcrumb-label").textContent = pageLabels[page];
     document.title = `${pageLabels[page]} · Relay`;
+    if (page === "publish") renderJourney();
     if (window.location.hash !== `#${page}`) {
       const update = recordHistory ? "pushState" : "replaceState";
       window.history[update]({}, "", `#${page}`);
     }
     $("#main-content").scrollTop = 0;
+    window.scrollTo({ top: 0, behavior: "instant" });
+    const heading = document.querySelector(`[data-page-view="${page}"] h1`);
+    heading?.setAttribute("tabindex", "-1");
+    heading?.focus({ preventScroll: true });
     if (page === "analytics") void loadAnalytics();
     if (page === "history") void loadPostHistory();
   };

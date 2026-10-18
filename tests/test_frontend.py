@@ -12,6 +12,19 @@ from relay.store import Store
 ORIGIN = {"Origin": "http://localhost:8000"}
 
 
+def test_public_preview_does_not_require_a_session_or_expose_private_data(settings):
+    with TestClient(create_app(settings)) as client:
+        preview = client.get("/try")
+        assert preview.status_code == 200
+        assert 'id="preview-caption"' in preview.text
+        assert 'href="/signup"' in preview.text
+        assert KEY not in preview.text
+        assert client.get("/accounts").status_code == 401
+        assert client.get("/content").status_code == 401
+        for asset in ("try.js", "app/flow-state.js", "app/journey.js", "styles/journey.css"):
+            assert client.get(f"/static/{asset}").status_code == 200
+
+
 def test_popup_oauth_callback_uses_completion_page(settings):
     with TestClient(create_app(settings, httpx.MockTransport(youtube_provider))) as client:
         assert unlock(client).status_code == 200

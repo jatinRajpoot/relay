@@ -19,6 +19,7 @@ window.handleOAuthResult = async ({provider, result}) => {
       connection: "We couldn't finish connecting. Check the exact callback URL and permissions in the Setup guide.",
     };
     notice(messages[result], true);
+    if ($("#channel-sheet").open) showJourneyRecovery(messages[result], () => connect(provider), $("#channel-sheet-error"), "Try connecting again");
   }
 };
 
@@ -60,6 +61,7 @@ async function connect(provider, popupAlreadyOpen = false) {
     });
   } catch (error) {
     window.oauthPopup.close();
+    if ($("#channel-sheet").open) showJourneyRecovery(`${error.message} Your post stays here.`, () => connect(provider), $("#channel-sheet-error"));
     notice(error.message, true, { label: "Retry now", run: () => connect(provider) });
     if (!authenticated) showUnlock(provider);
     resetConnectButtons();
@@ -108,7 +110,8 @@ $("#save-draft").addEventListener("click", saveLocalDraft);
 $("#composer-media-action").addEventListener("click", () => {
   if (!authenticated) { showUnlock(); return; }
   if ($("#media-picker-dialog").open) $("#media-picker-dialog").close();
-  setPage("content");
+  if (!contentStorageConfigured) { $("#setup-dialog").showModal(); return; }
+  $("#publish-file").click();
 });
 function openContentUpload() {
   if (!authenticated) { showUnlock(); return; }
@@ -238,6 +241,7 @@ $("#publish-file").addEventListener("change", async (event) => {
     await loadContent();
     selectedContentId = item.id;
     renderComposer();
+    scheduleDraftSave();
     status.textContent = "Added to your library.";
     $("#publish-file").value = "";
     $("#publish-file").removeAttribute("aria-invalid");
@@ -246,6 +250,7 @@ $("#publish-file").addEventListener("change", async (event) => {
     const message = `${error.message} ${file.name} is still selected.`;
     status.textContent = message;
     status.setAttribute("role", "alert");
+    showJourneyRecovery(message, () => $("#publish-file").dispatchEvent(new Event("change", { bubbles: true })), status);
     notice(message, true, uploadRecovery(error, $("#publish-file"), () => $("#publish-file").dispatchEvent(new Event("change", { bubbles: true }))));
   } finally {
     button.disabled = false;
@@ -259,6 +264,7 @@ $("#refresh-history").addEventListener("click", () => {
 $("#history-unlock").addEventListener("click", () => showUnlock());
 $("#overview-primary-action").addEventListener("click", () => {
   const destination = $("#overview-primary-action").dataset.nextAction;
+  restoreLocalDraft();
   if (destination === "unlock" || !authenticated) { showUnlock(); return; }
   if (destination === "upload") {
     setPage("content");
@@ -324,6 +330,9 @@ $("#workspace-select").addEventListener("change", async (event) => {
 $("#new-workspace").addEventListener("click", () => {
   $("#workspace-error").hidden = true;
   $("#workspace-dialog").showModal();
+  const capacity = workspaceCapacity($("#workspace-select").options.length);
+  $("#workspace-submit").disabled = Boolean(capacity);
+  if (capacity) showJourneyRecovery(capacity, () => { $("#workspace-dialog").close(); $("#workspace-select").focus(); }, $("#workspace-error"), "Switch workspace");
   $("#new-workspace-name").focus();
 });
 $("#workspace-form").addEventListener("submit", async (event) => {
@@ -341,6 +350,7 @@ $("#workspace-form").addEventListener("submit", async (event) => {
   } catch (error) {
     $("#workspace-error").textContent = error.message;
     $("#workspace-error").hidden = false;
+    if (error.status === 409 && error.message.includes("50")) showJourneyRecovery(workspaceCapacity(50), () => { $("#workspace-dialog").close(); $("#workspace-select").focus(); }, $("#workspace-error"), "Switch workspace");
   } finally { button.disabled = false; }
 });
 
@@ -404,6 +414,7 @@ $("#content-upload-form").addEventListener("submit", async (event) => {
     const message = `${error.message} ${file.name} is still selected.`;
     $("#content-upload-status").textContent = message;
     $("#content-upload-status").setAttribute("role", "alert");
+    showJourneyRecovery(message, () => $("#content-upload-form").requestSubmit(), $("#content-upload-status"));
     notice(message, true, uploadRecovery(error, $("#content-file"), () => $("#content-upload-form").requestSubmit()));
   } finally {
     button.querySelector("span").textContent = "Upload media";

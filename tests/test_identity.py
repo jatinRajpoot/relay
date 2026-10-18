@@ -32,7 +32,7 @@ def connect(client):
 
 def test_landing_auth_pages_and_dashboard_gate(settings):
     with TestClient(create_app(settings)) as client:
-        assert "Less juggling." in client.get("/").text
+        assert 'href="/try"' in client.get("/").text
         assert 'href="/signup"' in client.get("/").text
         assert "account-form" in client.get("/login").text
         assert "account-form" in client.get("/signup").text

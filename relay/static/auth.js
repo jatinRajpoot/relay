@@ -35,7 +35,18 @@ $("#account-form").addEventListener("submit", async (event) => {
       const detail = typeof data.detail === "string" ? data.detail : data.detail?.[0]?.msg;
       throw new Error(detail || "Check your details and try again.");
     }
-    window.location.replace("/app");
+    if (new URLSearchParams(location.search).get("resume") === "1" && window.opener) {
+      window.opener.postMessage({ type: "relay:session-restored" }, location.origin);
+      window.close();
+      return;
+    }
+    let destination = "/app#publish";
+    try {
+      const page = sessionStorage.getItem("relay:return-page");
+      if (["overview", "publish", "content", "connections", "history", "analytics"].includes(page)) destination = `/app#${page}`;
+      sessionStorage.removeItem("relay:return-page");
+    } catch {}
+    window.location.replace(destination);
   } catch (failure) {
     error.replaceChildren();
     const message = document.createElement("span");

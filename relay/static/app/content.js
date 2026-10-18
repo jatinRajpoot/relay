@@ -86,6 +86,17 @@ function makeMediaCard(item) {
   const metadata = document.createElement("small");
   metadata.textContent = formatBytes(item.size);
   details.append(filename, metadata);
+  const use = document.createElement("button");
+  use.type = "button";
+  use.className = "button button-secondary button-sm";
+  use.textContent = "Use in post";
+  use.addEventListener("click", () => {
+    selectedContentId = item.id;
+    renderComposer();
+    scheduleDraftSave();
+    setPage("publish");
+  });
+  details.append(use);
   card.append(preview, details);
   return card;
 }
@@ -137,12 +148,15 @@ function saveLocalDraft({ announce = true } = {}) {
   };
   try {
     localStorage.setItem(localDraftKey(), JSON.stringify(draft));
+    renderJourney();
     $("#draft-status").textContent = `Saved ${new Date(savedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
     if (historyLoaded) renderPostHistory();
     if (announce) notice("Draft saved in this browser.");
+    return true;
   } catch {
     $("#draft-status").textContent = "Draft not saved";
     if (announce) notice("Your draft could not be saved in this browser. Check browser storage and try again.", true);
+    return false;
   }
 }
 

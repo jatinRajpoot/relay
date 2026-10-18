@@ -29,6 +29,13 @@ The default SQLite file is `data/relay.sqlite3`. Preserve `TOKEN_ENCRYPTION_KEY`
 
 ## Using the workspace
 
+The [publishing journey specification](docs/publishing-journey.md) maps navigation,
+partial input, service recovery, and per-screen placement. Visitors can try a live
+caption preview at `/try` before creating an account. The caption carries into the
+first workspace draft. Studio opens or resumes the composer; media and channel
+pickers keep the current post in view. Browser-local drafts restore on refresh.
+Session expiry opens a sign-in overlay while preserving the current step.
+
 The workspace opens in a light editorial theme with a dark option. Your choice is remembered in this browser; toggle it with the theme button in the sidebar, `⌘J` / `Ctrl+J`, or the command menu.
 
 Press `⌘K` / `Ctrl+K` (or the search icon) for the command menu: jump to any page, create a post, connect a channel, open the setup guide, or toggle the theme. Outside text fields, `n` opens the composer and `g` followed by `h`/`n`/`l`/`c`/`a`/`y` jumps to Studio, Create, Library, Channels, Insights, or Published.
