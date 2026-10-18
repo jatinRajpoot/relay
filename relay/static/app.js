@@ -1830,10 +1830,18 @@ $("#instagram-publish-ready").addEventListener("click", async () => {
       post.updatedAt = Date.now();
       post.error = null;
     } catch (error) {
-      post.status = "unknown";
       post.error = error.message;
       post.updatedAt = Date.now();
-      post.nextCheckAt = Date.now() + 60_000;
+      // The server records the definitive outcome; mirror it instead of guessing.
+      try {
+        const latest = await api(`/instagram/posts/${encodeURIComponent(post.id)}`);
+        post.status = latest.status;
+      } catch {
+        post.status = "unknown";
+      }
+      post.nextCheckAt = ["processing", "unknown", "publishing"].includes(post.status)
+        ? Date.now() + 60_000
+        : null;
     }
     renderPublishResults();
   }
