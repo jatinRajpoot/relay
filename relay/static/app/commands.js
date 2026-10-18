@@ -1,7 +1,7 @@
 "use strict";
 
 document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
-  const currentTheme = document.documentElement.dataset.theme || "dark";
+  const currentTheme = document.documentElement.dataset.theme || "light";
   button.querySelector("use").setAttribute("href", currentTheme === "light" ? "#i-sun" : "#i-moon");
   button.setAttribute("aria-label", `Switch to ${currentTheme === "light" ? "dark" : "light"} theme`);
   button.addEventListener("click", () => {
@@ -15,12 +15,12 @@ document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
 
 /* ── Command palette ───────────────────────────────────────── */
 const paletteCommands = [
-  { label: "Overview", hint: "Workspace activity", icon: "home", group: "Go to", run: () => setPage("overview") },
+  { label: "Studio", hint: "Workspace activity", icon: "home", group: "Go to", run: () => setPage("overview") },
   { label: "Create a post", hint: "Compose", icon: "plus", group: "Go to", run: () => setPage("publish") },
-  { label: "Media library", hint: "Upload and reuse", icon: "media", group: "Go to", run: () => setPage("content") },
+  { label: "Library", hint: "Upload and reuse", icon: "media", group: "Go to", run: () => setPage("content") },
   { label: "Channels", hint: "Connect accounts", icon: "link", group: "Go to", run: () => setPage("connections") },
-  { label: "Analytics", hint: "Performance", icon: "chart", group: "Go to", run: () => setPage("analytics") },
-  { label: "Post history", hint: "Recent posts and statuses", icon: "history", group: "Go to", run: () => setPage("history") },
+  { label: "Insights", hint: "Performance", icon: "chart", group: "Go to", run: () => setPage("analytics") },
+  { label: "Published", hint: "Posts and status", icon: "history", group: "Go to", run: () => setPage("history") },
   { label: "Log in", hint: "Open your account", icon: "lock", group: "Actions", run: () => showUnlock() },
   { label: "Log out", hint: "Sign out of this browser", icon: "lock", group: "Actions", run: () => lockWorkspace() },
   { label: "Connect Instagram", hint: "OAuth popup", icon: "instagram", group: "Actions", run: () => connect("instagram") },
