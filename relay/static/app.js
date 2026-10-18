@@ -63,6 +63,15 @@ const oauthPopup = new OAuthPopup(window, async ({provider, result}) => {
   notice("Sign-in window closed. If the provider reported an invalid redirect URI, register the callback URL in the Setup guide. Otherwise, refresh the list after completing sign-in.");
 });
 
+function httpError(response, data) {
+  const detail = typeof data?.detail === "string" ? data.detail.trim() : "";
+  const error = new Error(
+    detail || `Relay returned an unexpected response (HTTP ${response.status}). Please try again.`
+  );
+  error.status = response.status;
+  return error;
+}
+
 async function api(path, options = {}) {
   let response;
   try {
@@ -72,15 +81,19 @@ async function api(path, options = {}) {
   } catch {
     throw new Error("Couldn't reach Relay. Check that the local service is running.");
   }
-  const data = response.status === 204 ? null : await response.json();
+  if (response.status === 204) return null;
+  // Read the body defensively. A framework or proxy error page is not JSON, and a
+  // parse failure must not replace the real HTTP status with a JavaScript message.
+  const data = await response.json().catch(() => null);
   if (!response.ok) {
     if (response.status === 401) {
       authenticated = false;
       renderSession();
       window.location.replace("/login");
     }
-    throw new Error(typeof data?.detail === "string" ? data.detail : "Something went wrong. Please try again.");
+    throw httpError(response, data);
   }
+  if (data === null) throw new Error("Relay returned an unexpected response. Please try again.");
   return data;
 }
 
@@ -1797,10 +1810,17 @@ async function checkInstagramStatuses() {
       post.checking = false;
       post.nextCheckAt = ["processing", "unknown", "publishing"].includes(post.status) ? Date.now() + 60_000 : null;
     } catch (error) {
-      post.error = error.message;
       post.checking = false;
       post.updatedAt = Date.now();
-      post.nextCheckAt = Date.now() + 60_000;
+      if (error.status === 404) {
+        // The channel was disconnected, so this job can never resolve.
+        post.status = "failed";
+        post.error = "This post is no longer available. Its channel may have been disconnected.";
+        post.nextCheckAt = null;
+      } else {
+        post.error = error.message;
+        post.nextCheckAt = Date.now() + 60_000;
+      }
     }
     renderPublishResults();
   }
