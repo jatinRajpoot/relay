@@ -91,6 +91,16 @@ def test_frontend_serves_packaged_assets_without_secrets(settings):
             "oauth-complete.js",
             "account.css",
             "auth.js",
+            "app/core.js",
+            "app/shell.js",
+            "app/overview.js",
+            "app/composer.js",
+            "app/content.js",
+            "app/history.js",
+            "app/connect.js",
+            "app/publishing.js",
+            "app/commands.js",
+            "styles/tokens.css",
         ):
             assert client.get(f"/static/{asset}").status_code == 200
         assert "javascript" in client.get("/static/oauth-popup.mjs").headers["content-type"]

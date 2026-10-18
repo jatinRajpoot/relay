@@ -24,7 +24,7 @@ dev = ["pytest>=9,<10", "ruff>=0.14,<1"]
 include = ["relay*"]
 
 [tool.setuptools.package-data]
-relay = ["static/*"]
+relay = ["static/*", "static/app/*.js", "static/styles/*.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

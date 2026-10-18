@@ -1,0 +1,19 @@
+/* Keep the accent on primary actions, avatar selection rings and status dots. */
+::selection { background: var(--surface-3); color: var(--text); }
+.nav-item.active::before { background: var(--line-strong); }
+.check-row[data-flow-state="current"] .flow-number,
+.check-row[data-flow-state="complete"] .flow-number { color: var(--muted); border-color: var(--line); background: var(--surface-2); }
+.pill, .pill-quiet, .count-pill { color: var(--muted); border-color: var(--line); background: var(--surface-2); }
+.platform-state.connected { color: var(--muted); background: transparent; }
+.platform-state.connected::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--accent); }
+.account-status, .overview-channel-status { color: var(--muted); background: transparent; }
+.account-status.expired, .overview-channel-status.expired { color: var(--muted); background: transparent; }
+.publish-result-row.published .result-status-badge, .result-open-link { color: var(--muted); }
+.status-summary.published { color: var(--muted); background: var(--surface-2); }
+.status-summary.pending, .status-summary.attention { color: var(--muted); background: var(--surface-2); border-color: var(--line); }
+.publish-result-row.failed .result-status-badge { color: var(--muted); background: var(--surface-3); }
+.media-selected-mark { color: var(--muted); background: var(--surface-2); }
+.palette-item[aria-selected="true"] .icon { color: var(--text-2); }
+.spinner { border-top-color: var(--line-strong); }
+.switch-row input { accent-color: var(--line-strong); }
+input:focus, textarea:focus, select:focus { border-color: var(--line-strong); box-shadow: 0 0 0 3px rgba(161,161,170,.08); }

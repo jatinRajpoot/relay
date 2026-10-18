@@ -1,0 +1,141 @@
+/* ── Neutral dark workspace refresh ─────────────────────────── */
+:root, [data-theme="light"] {
+  color-scheme: dark;
+  --bg: #09090b;
+  --bg-soft: #09090b;
+  --surface: #111113;
+  --surface-2: #18181b;
+  --surface-3: #27272a;
+  --line: rgba(39, 39, 42, 0.8);
+  --line-strong: #3f3f46;
+  --text: #fafafa;
+  --text-2: #e4e4e7;
+  --muted: #a1a1aa;
+  --faint: #71717a;
+  --accent: #c8f560;
+  --accent-ink: #09090b;
+  --accent-soft: rgba(200, 245, 96, 0.08);
+  --accent-line: rgba(200, 245, 96, 0.28);
+  --success: #c8f560;
+  --success-soft: transparent;
+  --shadow: none;
+}
+
+.brand-mark i { background: var(--text-2); }
+.brand-name span { color: var(--muted); }
+
+.nav-item.active {
+  background: rgba(39, 39, 42, 0.7);
+  border: 1px solid #3f3f46;
+  color: #f4f4f5;
+}
+.nav-item.active::before {
+  left: 7px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+.nav-item.active .icon { color: var(--text-2); }
+.nav-accent {
+  margin: 4px 0 8px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  background: #09090b;
+  color: #f4f4f5;
+  font-weight: 550;
+}
+.nav-accent .icon { color: var(--text-2); }
+.nav-accent:hover { background: #18181b; color: #fff; }
+.nav-accent:hover .icon { color: #fff; }
+
+.session-button,
+.session-button.unlocked {
+  color: #a1a1aa;
+  border-color: transparent;
+  background: transparent;
+}
+.session-button:hover:not(:disabled) { color: #e4e4e7; background: transparent; border-color: transparent; }
+.session-button .icon,
+.session-button.unlocked .icon { color: currentColor; }
+
+.button-primary { background: #c8f560; color: #09090b; font-weight: 560; }
+.button-primary:hover:not(:disabled) { background: #d2fa78; filter: none; }
+body:has(dialog[open]) .shell .button-primary {
+  border-color: var(--line-strong);
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+.button-secondary {
+  border: 1px solid #3f3f46;
+  background: #27272a;
+  color: #f4f4f5;
+}
+.button-secondary:hover:not(:disabled) { background: #3f3f46; color: #fff; }
+.button-ghost { background: transparent; border-color: transparent; color: #a1a1aa; }
+.button-ghost:hover:not(:disabled) { background: #18181b; border-color: transparent; color: #e4e4e7; }
+.icon-button { background: transparent; border-color: transparent; }
+.icon-button:hover:not(:disabled) { background: #18181b; border-color: transparent; }
+.card { background: #111113; box-shadow: none; }
+.card-muted { background: #111113; }
+
+.stat-strip {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(24, 24, 27, 0.4);
+}
+.stat-tile,
+button.stat-tile:hover {
+  min-width: 0;
+  padding: 3px 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.stat-tile + .stat-tile { border-left: 1px solid var(--line); }
+.stat-icon, .stat-readiness .stat-icon { width: 28px; height: 28px; background: transparent; color: var(--muted); }
+.stat-go { display: none; }
+
+.check-row[data-flow-state="current"] {
+  border-color: #3f3f46;
+  background: rgba(39, 39, 42, 0.7);
+}
+.check-row[data-flow-state="current"] .flow-number,
+.check-row[data-flow-state="complete"] .flow-number {
+  border-color: var(--line-strong);
+  background: transparent;
+  color: var(--accent);
+}
+.overview-channel-action:hover { border-color: var(--line-strong); color: var(--text); background: var(--surface-2); }
+.mini-posts { gap: 0; }
+.mini-post {
+  padding: 9px 2px;
+  border-radius: 0;
+  border-bottom: 1px solid rgba(63, 63, 70, 0.6);
+}
+.mini-post:last-child { border-bottom: 0; }
+.overview-media-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 2px;
+  border-bottom: 1px solid rgba(63, 63, 70, 0.6);
+}
+.overview-media-row:last-child { border-bottom: 0; }
+.media-grid-compact { display: flex; flex-direction: column; gap: 0; }
+.overview-media-thumb {
+  display: block;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--surface-3);
+}
+.overview-media-thumb img, .overview-media-thumb video { width: 100%; height: 100%; object-fit: cover; }
+.overview-media-copy { display: flex; flex-direction: column; min-width: 0; }
+.overview-media-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 550; }
+.overview-media-copy small { color: var(--faint); font-size: 11px; }

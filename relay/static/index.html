@@ -10,7 +10,6 @@
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="stylesheet" href="/static/account.css">
   <script>try { document.documentElement.dataset.theme = localStorage.getItem("relay-theme") || "dark"; } catch { document.documentElement.dataset.theme = "dark"; }</script>
-  <script src="/static/app.js" type="module"></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -628,5 +627,16 @@
   </template>
 
   <noscript><div class="noscript">Relay needs JavaScript to manage your channels.</div></noscript>
+  <!-- These classic scripts share page state; preserve their order. app.js starts the app last. -->
+  <script src="/static/app/core.js"></script>
+  <script src="/static/app/shell.js"></script>
+  <script src="/static/app/overview.js"></script>
+  <script src="/static/app/composer.js"></script>
+  <script src="/static/app/content.js"></script>
+  <script src="/static/app/history.js"></script>
+  <script src="/static/app/connect.js"></script>
+  <script src="/static/app/publishing.js"></script>
+  <script src="/static/app/commands.js"></script>
+  <script type="module" src="/static/app.js"></script>
 </body>
 </html>
