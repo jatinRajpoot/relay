@@ -393,7 +393,7 @@ def create_app(settings: Settings | None = None, transport=None):
 
     @app.get("/posts", dependencies=protected, tags=["Publishing"])
     async def post_history():
-        """List the latest posts published through Relay across connected channels."""
+        """List recent publishing activity, including Instagram posts still processing."""
         posts = store.list_post_history()
         return {"posts": posts, "count": len(posts)}
 

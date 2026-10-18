@@ -1535,6 +1535,17 @@ a.analytics-post-link:hover { background: var(--surface-2); }
 
 .history-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 .history-meta time { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.history-status {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.history-status.published { color: #34d399; }
+.history-status.processing, .history-status.ready, .history-status.publishing { color: #fbbf24; }
+.history-status.failed, .history-status.expired, .history-status.unknown { color: #fb7185; }
 .history-visibility {
   padding: 1px 6px;
   border-radius: 4px;

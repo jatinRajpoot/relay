@@ -159,7 +159,7 @@
             </button>
             <button class="stat-tile" type="button" data-nav="history">
               <span class="stat-icon"><svg class="icon"><use href="#i-history"/></svg></span>
-              <span class="stat-body"><small>Published</small><strong id="overview-history-count">—</strong></span>
+              <span class="stat-body"><small>Posts</small><strong id="overview-history-count">—</strong></span>
               <svg class="icon stat-go"><use href="#i-chevron"/></svg>
             </button>
             <div class="stat-tile stat-readiness">
@@ -423,7 +423,6 @@
                     </div>
                     <div class="head-actions">
                       <button class="button button-quiet button-sm" id="instagram-check-all" type="button" hidden>Check now</button>
-                      <button class="button button-primary button-sm" id="instagram-publish-ready" type="button" hidden>Publish ready</button>
                       <button class="button button-ghost button-sm" id="publish-new-post" type="button">New post</button>
                     </div>
                   </div>
@@ -650,7 +649,7 @@
           <div class="page-intro">
             <div>
               <h1>History</h1>
-              <p>Everything published through Relay.</p>
+              <p>Posts created through Relay, including ones still processing.</p>
             </div>
             <div class="intro-actions">
               <button class="button button-ghost" id="refresh-history" type="button">
@@ -666,13 +665,13 @@
           </div>
           <div id="history-loading" class="message-block" role="status" hidden>
             <span class="spinner" aria-hidden="true"></span>
-            <div><strong>Loading history…</strong><p>Gathering posts published through Relay.</p></div>
+            <div><strong>Loading history…</strong><p>Gathering recent posts and their statuses.</p></div>
           </div>
           <div id="history-error" class="message-block message-error" role="alert" hidden></div>
           <div id="history-empty" class="empty-state" hidden>
             <span class="empty-state-icon"><svg class="icon"><use href="#i-history"/></svg></span>
-            <h3>Nothing published yet</h3>
-            <p>Successful Instagram posts and YouTube uploads appear here.</p>
+            <h3>No posts yet</h3>
+            <p>Instagram posts and YouTube uploads appear here with their latest status.</p>
             <button class="button button-primary" type="button" data-nav="publish">Create a post</button>
           </div>
           <div id="history-list" class="history-list" role="list" hidden></div>

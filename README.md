@@ -29,7 +29,7 @@ The workspace is a dark-first studio UI with a light theme. The theme follows yo
 
 Press `⌘K` / `Ctrl+K` (or the search icon) for the command menu: jump to any page, create a post, connect a channel, open the setup guide, or toggle the theme. Outside text fields, `n` opens the composer and `g` followed by `h`/`n`/`l`/`c`/`a`/`y` jumps to Home, Create, Media, Channels, Analytics, or History.
 
-Home is a status dashboard: channel, media and published counts, the setup checklist, recent media, connected channels, and the last three published posts. **Create post** keeps media, channels, and details on one page with a sticky preview and publish panel, so you can scroll back and change anything before sending. Instagram still requires a separate confirmation before a post goes live; the delivery panel tracks each destination individually.
+Home is a status dashboard: channel, media and post counts, the setup checklist, recent media, connected channels, and the last three posts. **Create post** keeps media, channels, and details on one page with a sticky preview and publish panel, so you can scroll back and change anything before sending. Instagram posts publish automatically after Meta finishes processing; the delivery panel tracks each destination individually.
 
 On screens narrower than 720px the sidebar is replaced by a bottom tab bar and the composer stacks into a single column.
 
@@ -103,9 +103,9 @@ Meta fetches the media itself, so it needs a publicly accessible HTTPS URL (JPEG
 
 The frontend's **Content** section uploads JPEG photos and video files to the media library. In **Publish**, select a saved item for Instagram or YouTube. Instagram media needs a publicly accessible HTTPS URL, so the configured bucket must grant public object viewer access. YouTube videos are read from the same bucket and streamed into YouTube's resumable upload. The deployment limit is 20 MiB; local uploads use `MAX_UPLOAD_BYTES`.
 
-Instagram first sends the media to Meta for processing; that step does not publish the post. The **Publishing status** area shows each account as processing, ready but not live, publishing, or confirmed published. Processing statuses refresh automatically about once a minute. When a post is ready, select **Publish ready posts**; the row changes to **Published** only after Relay receives confirmation.
+Instagram first sends the media to Meta for processing. The **Publishing status** area shows each account as processing, ready, publishing, or confirmed published. Processing statuses refresh automatically about once a minute, and Relay publishes each post automatically as soon as Meta reports it ready. The **History** page includes Instagram jobs at every saved stage as well as completed YouTube uploads. Pending jobs resume status checks and automatic publishing when the dashboard is open and the workspace is unlocked.
 
-Open **History** to review the latest 200 posts published through Relay. Instagram posts are added after publishing completes; YouTube uploads are added after the upload succeeds. Previously published Instagram jobs are included when the service upgrades its local database. Disconnecting an account removes its local history records along with its saved connection.
+Open **History** to review the latest 200 posts created through Relay, including Instagram jobs that are still processing, ready, publishing, failed, or expired. YouTube uploads appear after the upload succeeds. Previously published Instagram jobs are included when the service upgrades its local database. Disconnecting an account removes its local history records along with its saved connection.
 
 1. `POST /instagram/posts` creates an **unpublished** container and saves its job in SQLite:
 
@@ -119,8 +119,8 @@ Open **History** to review the latest 200 posts published through Relay. Instagr
    ```
 
    Use `"media_type": "IMAGE"` and an image URL for a photo post.
-2. Use the returned job `id` with `GET /instagram/posts/{id}`. Poll at most once per minute until `status` is `ready`; videos can take several minutes. `failed` / `expired` are terminal states.
-3. `POST /instagram/posts/{id}/publish` checks readiness and publishes immediately, returning the saved `media_id`. Calling it again after success returns the saved result without publishing again.
+2. The frontend checks the returned job automatically about once per minute until Meta reports it is ready; videos can take several minutes. Direct API users can poll `GET /instagram/posts/{id}` themselves.
+3. The frontend automatically calls `POST /instagram/posts/{id}/publish` when ready. Direct API users can call it themselves; repeated calls after success return the saved result without publishing again.
 
 The job atomically claims publication to prevent simultaneous requests from publishing twice. If publication fails ambiguously, its status becomes `unknown`: poll status to reconcile whether Meta published it and check Instagram before taking further action. The service blocks automatic retries of unknown jobs. A process crash during a publish may leave `publishing`; a later status check asks Meta to confirm it, and Relay records the post if Meta reports it as published. Images and Reels are supported; carousels and Stories are not implemented.
 
@@ -135,7 +135,7 @@ The job atomically claims publication to prevent simultaneous requests from publ
 | POST | `/accounts/{id}/refresh` | Refresh stored authorization |
 | DELETE | `/accounts/{id}` | Remove local connection |
 | GET | `/analytics?days=30` | Fetch provider metrics for 7, 30, or 90 days |
-| GET | `/posts` | List the latest 200 posts published through Relay |
+| GET | `/posts` | List recent posts, including Instagram jobs still processing |
 | GET | `/content` | List saved media library items |
 | POST | `/content` | Upload JPEG or video content to the media library |
 | POST | `/youtube/videos` | Multipart video upload or saved content selection |
