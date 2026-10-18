@@ -76,7 +76,7 @@ class Store:
                     post_url TEXT,
                     visibility TEXT,
                     published_at INTEGER NOT NULL,
-                    UNIQUE(provider, platform_post_id)
+                    UNIQUE(provider, account_id, platform_post_id)
                 );
                 CREATE TABLE IF NOT EXISTS content_items (
                     id TEXT PRIMARY KEY,
@@ -107,6 +107,7 @@ class Store:
             ):
                 if column not in post_columns:
                     db.execute(f"ALTER TABLE instagram_posts ADD COLUMN {column} {declaration}")
+            self._migrate_post_history(db)
             db.execute(
                 """
                 INSERT INTO post_history(
@@ -115,7 +116,7 @@ class Store:
                 SELECT 'instagram-' || id, 'instagram', account_id, media_id, created_at
                 FROM instagram_posts
                 WHERE status='published' AND media_id IS NOT NULL
-                ON CONFLICT(provider, platform_post_id) DO NOTHING
+                ON CONFLICT DO NOTHING
                 """
             )
             db.execute(
@@ -157,6 +158,49 @@ class Store:
                 db.execute(
                     f"ALTER TABLE {table} ADD COLUMN workspace_id TEXT NOT NULL DEFAULT 'legacy'"
                 )
+
+    @staticmethod
+    def _migrate_post_history(db):
+        # Older databases allowed one history row per platform post across the whole
+        # service, so the same channel connected in two workspaces silently lost its
+        # history in one of them. Rebuild the table with the account in the key.
+        legacy_key = False
+        for index in db.execute("PRAGMA index_list(post_history)").fetchall():
+            if not index[2]:
+                continue
+            columns = [row[2] for row in db.execute(f'PRAGMA index_info("{index[1]}")')]
+            if columns == ["provider", "platform_post_id"]:
+                legacy_key = True
+        if not legacy_key:
+            return
+        db.commit()
+        db.execute("PRAGMA foreign_keys=OFF")
+        try:
+            with db:
+                db.execute("BEGIN IMMEDIATE")
+                db.execute("""CREATE TABLE post_history_scoped (
+                    id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL CHECK(provider IN ('youtube', 'instagram')),
+                    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                    platform_post_id TEXT NOT NULL,
+                    title TEXT,
+                    caption TEXT NOT NULL DEFAULT '',
+                    media_name TEXT,
+                    media_type TEXT,
+                    media_url TEXT,
+                    post_url TEXT,
+                    visibility TEXT,
+                    published_at INTEGER NOT NULL,
+                    UNIQUE(provider, account_id, platform_post_id)
+                )""")
+                db.execute("""INSERT INTO post_history_scoped
+                    SELECT id, provider, account_id, platform_post_id, title, caption,
+                    media_name, media_type, media_url, post_url, visibility, published_at
+                    FROM post_history""")
+                db.execute("DROP TABLE post_history")
+                db.execute("ALTER TABLE post_history_scoped RENAME TO post_history")
+        finally:
+            db.execute("PRAGMA foreign_keys=ON")
 
     @contextmanager
     def connection(self):
@@ -408,7 +452,7 @@ class Store:
                 id, provider, account_id, platform_post_id, caption, media_type,
                 media_url, published_at
             ) VALUES (?, 'instagram', ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(provider, platform_post_id) DO NOTHING
+            ON CONFLICT DO NOTHING
             """,
             (
                 f"instagram-{post['id']}",
@@ -440,10 +484,10 @@ class Store:
                     id, provider, account_id, platform_post_id, title, caption,
                     media_name, media_type, media_url, post_url, visibility, published_at
                 ) VALUES (?, 'youtube', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(provider, platform_post_id) DO NOTHING
+                ON CONFLICT DO NOTHING
                 """,
                 (
-                    f"youtube-{video_id}",
+                    f"youtube-{account_id}-{video_id}",
                     account_id,
                     video_id,
                     title,

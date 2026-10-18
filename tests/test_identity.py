@@ -188,6 +188,70 @@ def test_legacy_database_migration_preserves_connections_and_foreign_keys(settin
     assert store.get_post("job") is None
 
 
+def test_same_platform_post_is_recorded_for_each_connected_account(settings):
+    store = Store(settings.database_path, settings.encryption_key)
+    tokens = {"access_token": "token", "expires_in": 3600}
+    first = store.save_account("youtube", "channel", "First", tokens, "scope")
+    scope = store.workspace.set("studio")
+    try:
+        second = store.save_account("youtube", "channel", "Second", tokens, "scope")
+    finally:
+        store.workspace.reset(scope)
+    store.save_youtube_history(
+        first["id"], "video-1", "First upload", "", "a.mp4", "video/mp4", None,
+        "https://youtu.be/video-1", "private",
+    )
+    store.save_youtube_history(
+        second["id"], "video-1", "Second upload", "", "b.mp4", "video/mp4", None,
+        "https://youtu.be/video-1", "private",
+    )
+    assert [row["title"] for row in store.list_post_history()] == ["First upload"]
+    scope = store.workspace.set("studio")
+    try:
+        assert [row["title"] for row in store.list_post_history()] == ["Second upload"]
+    finally:
+        store.workspace.reset(scope)
+
+
+def test_legacy_post_history_unique_key_is_migrated(settings):
+    store = Store(settings.database_path, settings.encryption_key)
+    account = store.save_account(
+        "youtube", "channel", "Channel", {"access_token": "token", "expires_in": 3600}, "scope"
+    )
+    store.save_youtube_history(
+        account["id"], "video-1", "Kept", "", "a.mp4", "video/mp4", None,
+        "https://youtu.be/video-1", "private",
+    )
+    # Rewrite the table the way older releases shipped it: one row per platform post.
+    with store.connection() as db:
+        db.executescript("""
+            ALTER TABLE post_history RENAME TO post_history_previous;
+            CREATE TABLE post_history (
+                id TEXT PRIMARY KEY,
+                provider TEXT NOT NULL CHECK(provider IN ('youtube', 'instagram')),
+                account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                platform_post_id TEXT NOT NULL,
+                title TEXT, caption TEXT NOT NULL DEFAULT '',
+                media_name TEXT, media_type TEXT, media_url TEXT,
+                post_url TEXT, visibility TEXT,
+                published_at INTEGER NOT NULL,
+                UNIQUE(provider, platform_post_id)
+            );
+            INSERT INTO post_history SELECT * FROM post_history_previous;
+            DROP TABLE post_history_previous;
+        """)
+    migrated = Store(settings.database_path, settings.encryption_key)
+    assert [row["title"] for row in migrated.list_post_history()] == ["Kept"]
+    with migrated.connection() as db:
+        assert list(db.execute("PRAGMA foreign_key_check")) == []
+        keys = {
+            tuple(row[2] for row in db.execute(f'PRAGMA index_info("{index[1]}")'))
+            for index in db.execute("PRAGMA index_list(post_history)").fetchall()
+            if index[2]
+        }
+    assert ("provider", "account_id", "platform_post_id") in keys
+
+
 def test_account_sessions_and_workspaces_survive_restart(settings):
     with TestClient(create_app(settings)) as client:
         original = signup(client)
