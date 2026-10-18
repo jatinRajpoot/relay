@@ -23,7 +23,7 @@ from starlette.datastructures import Headers
 
 from relay.config import Settings
 from relay.identity import SESSION_SECONDS, Identity
-from relay.providers import Providers
+from relay.providers import ProviderError, Providers
 from relay.store import Store, digest
 
 Provider = Literal["youtube", "instagram"]
@@ -661,6 +661,10 @@ def create_app(settings: Settings | None = None, transport=None):
                 store.decrypt(account["access_token"]),
                 post["container_id"],
             )
+        except ProviderError as error:
+            # A rejection the provider answered is final; only uncertain outcomes block retries.
+            store.update_post(post_id, "unknown" if error.ambiguous else "failed")
+            raise
         except Exception:
             store.update_post(post_id, "unknown")
             raise

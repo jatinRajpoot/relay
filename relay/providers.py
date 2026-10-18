@@ -15,6 +15,20 @@ YOUTUBE_SCOPES = (
 INSTAGRAM_SCOPES = "instagram_business_basic,instagram_business_content_publish"
 
 
+class ProviderError(HTTPException):
+    """A failed provider call.
+
+    ``ambiguous`` marks failures where the provider may still have completed the
+    request (transport errors, unparseable replies). Callers that mutate remote
+    state must not retry those automatically; a definite rejection is not
+    ambiguous and can be recorded as a final failure.
+    """
+
+    def __init__(self, status_code: int, detail: str, *, ambiguous: bool = False):
+        super().__init__(status_code, detail)
+        self.ambiguous = ambiguous
+
+
 class Providers:
     def __init__(self, settings: Settings, client: httpx.AsyncClient):
         self.settings = settings
@@ -25,8 +39,11 @@ class Providers:
         try:
             response = await self.client.request(method, url, **kwargs)
         except httpx.RequestError:
-            raise HTTPException(
-                502, "Provider connection failed. Check status before retrying uploads."
+            # The provider may have received the request before the connection broke.
+            raise ProviderError(
+                502,
+                "Provider connection failed. Check status before retrying uploads.",
+                ambiguous=True,
             ) from None
         if response.is_error or response.is_redirect:
             # Provider messages and URLs can contain credentials; never forward or log them.
@@ -35,12 +52,12 @@ class Providers:
             except (ValueError, AttributeError):
                 error = None
             if error == "invalid_grant" or (isinstance(error, dict) and error.get("code") == 190):
-                raise HTTPException(
+                raise ProviderError(
                     409, "Provider authorization expired or was revoked. Reconnect account."
                 )
             if response.status_code == 401:
-                raise HTTPException(409, "Provider rejected authorization. Reconnect account.")
-            raise HTTPException(502, f"Provider request failed (HTTP {response.status_code}).")
+                raise ProviderError(409, "Provider rejected authorization. Reconnect account.")
+            raise ProviderError(502, f"Provider request failed (HTTP {response.status_code}).")
         return response
 
     @staticmethod
@@ -48,9 +65,10 @@ class Providers:
         try:
             data = response.json()
         except ValueError:
-            raise HTTPException(502, "Provider returned invalid JSON.") from None
+            # A 2xx reply we cannot read: the remote side may already have acted on it.
+            raise ProviderError(502, "Provider returned invalid JSON.", ambiguous=True) from None
         if not isinstance(data, dict) or "error" in data:
-            raise HTTPException(502, "Provider returned an invalid response.")
+            raise ProviderError(502, "Provider returned an invalid response.", ambiguous=True)
         return data
 
     @staticmethod
@@ -64,14 +82,16 @@ class Providers:
         except (ValueError, TypeError, KeyError):
             valid = False
         if not valid:
-            raise HTTPException(502, "Provider returned incomplete token data.")
+            raise ProviderError(502, "Provider returned incomplete token data.")
         return data
 
     @staticmethod
     def required_id(data, key="id"):
         value = data.get(key)
         if not isinstance(value, (str, int)) or not str(value):
-            raise HTTPException(502, "Provider did not return a resource identifier.")
+            raise ProviderError(
+                502, "Provider did not return a resource identifier.", ambiguous=True
+            )
         return str(value)
 
     @staticmethod

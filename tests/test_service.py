@@ -337,6 +337,31 @@ def test_failed_publish_is_not_blindly_retried(settings):
         assert len(publish_calls) == 1
 
 
+def test_rejected_publish_is_recorded_as_failed_not_unknown(settings):
+    publish_calls = []
+
+    def handler(request):
+        if request.url.path.endswith("/media_publish"):
+            publish_calls.append(request)
+            return httpx.Response(
+                400, json={"error": {"message": "Media not ready", "code": 9007}}
+            )
+        if request.url.path == "/v25.0/container-1":
+            return httpx.Response(200, json={"status_code": "FINISHED"})
+        return instagram_provider(request)
+
+    app = create_app(settings, httpx.MockTransport(handler))
+    with TestClient(app) as client:
+        account, _ = connect(client, "instagram")
+        post = app.state.store.create_post(account["id"], "container-1")
+        path = f"/instagram/posts/{post['id']}/publish"
+        assert client.post(path, headers=HEADERS).status_code == 502
+        # The provider answered, so the job is a definite failure rather than an unknown one.
+        assert app.state.store.get_post(post["id"])["status"] == "failed"
+        assert client.post(path, headers=HEADERS).status_code == 409
+        assert len(publish_calls) == 1
+
+
 def test_youtube_stream_upload_and_automatic_refresh(settings):
     def handler(request):
         if request.url.path == "/upload/youtube/v3/videos":
