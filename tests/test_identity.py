@@ -90,9 +90,26 @@ def test_credentials_validation_origin_and_throttling(settings):
             })
             assert response.status_code == 401
             assert response.json()["detail"] == "Email or password is incorrect."
+        # A correct password still works: only failures consume the budget.
+        assert client.post("/auth/login", headers=ORIGIN, json={
+            "email": "alex@example.com", "password": PASSWORD,
+        }).status_code == 200
+        # Nine failures are recorded (the duplicate signup counted), so the tenth is the last.
+        assert client.post("/auth/login", headers=ORIGIN, json={
+            "email": "alex@example.com", "password": "wrong",
+        }).status_code == 401
         assert client.post("/auth/login", headers=ORIGIN, json={
             "email": "alex@example.com", "password": PASSWORD,
         }).status_code == 429
+
+
+def test_successful_logins_do_not_consume_the_throttle(settings):
+    with TestClient(create_app(settings)) as client:
+        signup(client)
+        for _ in range(15):
+            assert client.post("/auth/login", headers=ORIGIN, json={
+                "email": "alex@example.com", "password": PASSWORD,
+            }).status_code == 200
 
 
 def test_users_workspaces_and_every_resource_are_isolated(settings):
