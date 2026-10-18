@@ -434,25 +434,28 @@ def create_app(settings: Settings | None = None, transport=None):
         result.delete_cookie(cookie_name, path=urlsplit(settings.redirect_uri(provider)).path)
         return result
 
+    async def with_avatar(row):
+        if row.get("avatar_url"):
+            return row
+        try:
+            account = await valid_account(row["id"], row["provider"])
+            avatar_url = await app.state.providers.account_avatar(
+                account["provider"],
+                account["external_id"],
+                store.decrypt(account["access_token"]),
+            )
+        except HTTPException:
+            # A missing avatar should never prevent account selection.
+            return row
+        return store.update_account_avatar(row["id"], avatar_url) if avatar_url else row
+
     @app.get("/accounts", dependencies=protected, tags=["Accounts"])
     async def accounts(include_avatars: bool = False):
         rows = store.list_accounts()
         if include_avatars:
-            for index, row in enumerate(rows):
-                if row.get("avatar_url"):
-                    continue
-                try:
-                    account = await valid_account(row["id"], row["provider"])
-                    avatar_url = await app.state.providers.account_avatar(
-                        account["provider"],
-                        account["external_id"],
-                        store.decrypt(account["access_token"]),
-                    )
-                except HTTPException:
-                    # A missing avatar should never prevent account selection.
-                    continue
-                if avatar_url:
-                    rows[index] = store.update_account_avatar(row["id"], avatar_url)
+            # One provider round trip per channel: run them together so a slow or
+            # unreachable channel cannot delay the whole list.
+            rows = list(await asyncio.gather(*(with_avatar(row) for row in rows)))
         return {"accounts": [store.public_account(row) for row in rows]}
 
     @app.get("/analytics", dependencies=protected, tags=["Analytics"])
@@ -463,8 +466,8 @@ def create_app(settings: Settings | None = None, transport=None):
         end = date.today()
         start = end - timedelta(days=days - 1)
         period = {"days": days, "start_date": start.isoformat(), "end_date": end.isoformat()}
-        results = []
-        for account in store.list_accounts():
+
+        async def report_for(account):
             item = {
                 "account_id": account["id"],
                 "provider": account["provider"],
@@ -504,7 +507,10 @@ def create_app(settings: Settings | None = None, transport=None):
                 item["message"] = (
                     "Analytics could not be loaded. Reconnect this channel or try again later."
                 )
-            results.append(item)
+            return item
+
+        # Channels are independent, so fetch them together rather than one after another.
+        results = list(await asyncio.gather(*(report_for(row) for row in store.list_accounts())))
         return {"period": period, "accounts": results}
 
     @app.get("/posts", dependencies=protected, tags=["Publishing"])

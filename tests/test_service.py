@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import json
@@ -487,6 +488,46 @@ def test_validation_wrong_account_media_and_disconnect(settings):
         assert client.delete(f"/accounts/{account['id']}", headers=HEADERS).status_code == 204
         assert client.get("/accounts", headers=HEADERS).json() == {"accounts": []}
         assert client.post(f"/accounts/{account['id']}/refresh", headers=HEADERS).status_code == 404
+
+
+def test_avatar_lookups_run_concurrently(settings):
+    calls = []
+
+    class SlowTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request):
+            assert request.url.path == "/youtube/v3/channels", request.url.path
+            calls.append(request)
+            await asyncio.sleep(0.2)
+            return httpx.Response(
+                200,
+                json={
+                    "items": [
+                        {
+                            "id": "channel",
+                            "snippet": {"thumbnails": {"default": {"url": "https://img.example/a.jpg"}}},
+                        }
+                    ]
+                },
+            )
+
+    app = create_app(settings, SlowTransport())
+    with TestClient(app) as client:
+        for index in range(3):
+            app.state.store.save_account(
+                "youtube",
+                f"channel-{index}",
+                f"Channel {index}",
+                {"access_token": "token", "expires_in": 3600},
+                "scope",
+            )
+        started = time.perf_counter()
+        response = client.get("/accounts?include_avatars=true", headers=HEADERS)
+        elapsed = time.perf_counter() - started
+        assert response.status_code == 200
+        assert len(calls) == 3
+        assert all(row["avatar_url"] for row in response.json()["accounts"])
+        # Three 200 ms lookups finish in roughly one round trip, not three.
+        assert elapsed < 0.5, f"avatar lookups ran sequentially ({elapsed:.2f}s)"
 
 
 def test_local_health_and_openapi(settings):
