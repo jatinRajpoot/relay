@@ -11,15 +11,19 @@ python -m venv .venv
 .\.venv\Scripts\python -m uvicorn relay.app:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-Open <http://localhost:8000> for the Connections frontend. Click **Connect Instagram** or **Connect YouTube**, unlock once with `SERVICE_API_KEY` from `.env`, and sign in with the provider. The frontend uses an encrypted HttpOnly browser session lasting eight hours; the key and provider tokens are never placed in browser storage. **Lock workspace** signs this browser out without disconnecting your accounts.
+Open <http://localhost:8000> for the public landing page, then choose **Create your account** or **Log in**. Signup creates an account and its first workspace. Passwords must contain at least 12 characters and are stored as salted scrypt hashes. Browser sessions use random, server-revocable HttpOnly cookies lasting eight hours; only token hashes persist in SQLite. **Log out** revokes this browser session without disconnecting channels. Credentials and provider tokens are never placed in browser storage.
 
-The page shows your connected accounts, expiration status, reconnect/disconnect actions, a setup guide with copyable callback URLs, and a post history for Instagram and YouTube publishing completed through Relay. Connect opens a centered 520×720 sign-in popup before waiting for any network requests, including when you first unlock the workspace. The dashboard stays open. Google explicitly asks you to choose an account and grant consent. Browsers may display a separate tab instead of a small window; allow popups for your workspace. Provider pages run in the sign-in window, rather than an embedded iframe.
+Use the workspace selector at the top of the dashboard to switch projects, or **+ New** to create another workspace (up to 50 per account). Each workspace owns its channels, media library, publishing jobs, analytics, and post history. The same Instagram or YouTube channel can be connected independently in different workspaces. Each browser tab pins requests to its loaded workspace so switching in another tab cannot redirect an in-progress upload. OAuth completion also saves connections to the workspace where authorization began.
+
+Existing connections, media, and publishing history migrate into a separate legacy workspace. New accounts never inherit legacy data. Existing service-key API clients and `POST /session` keep access to that legacy workspace only; the key cannot access user-owned workspaces. For the old operator dashboard, use `POST /session` with the service key through the API reference in the same browser, then open `/app`. Account ownership is private to one user; team invitations, email verification, and password recovery are not included.
+
+The page shows your connected accounts, expiration status, reconnect/disconnect actions, a setup guide with copyable callback URLs, and a post history for Instagram and YouTube publishing completed through Relay. Connect opens a centered 520×720 sign-in popup before waiting for any network requests, after logging in. The dashboard stays open. Google explicitly asks you to choose an account and grant consent. Browsers may display a separate tab instead of a small window; allow popups for your workspace. Provider pages run in the sign-in window, rather than an embedded iframe.
 
 After consent or cancellation, the popup reports its result to the dashboard using `postMessage`. The dashboard validates the exact origin, window reference and provider before accepting the result, closes the popup and refreshes the account list. Only a result status crosses this channel; tokens remain on the server. If a browser severs the opener connection, the completion page offers a manual return to the workspace; refresh the account list there.
 
 Existing API clients still get JSON callbacks. `?ui=true` opts into dashboard redirects; `?ui=true&popup=true` opts into `/oauth/complete` with a result status. State records preserve this choice server-side.
 
-The API reference remains at <http://localhost:8000/docs>. Click **Authorize** and paste `SERVICE_API_KEY` to use it. This key controls every connected account. `setup_local.py` adds missing service settings without replacing your Instagram/YouTube credentials. It is safe to rerun. For a fresh checkout copy `.env.example` to `.env` first and fill in provider credentials.
+The API reference remains at <http://localhost:8000/docs>. Click **Authorize** and paste `SERVICE_API_KEY` to use it. This key controls only connections in the legacy workspace. `setup_local.py` adds missing service settings without replacing your Instagram/YouTube credentials. It is safe to rerun. For a fresh checkout copy `.env.example` to `.env` first and fill in provider credentials.
 
 The default SQLite file is `data/relay.sqlite3`. Preserve `TOKEN_ENCRYPTION_KEY`; changing it makes existing tokens unreadable. `.env`, virtual environments and local databases are ignored by Git. Disable access logging as shown because OAuth callbacks contain authorization codes. Avoid enabling HTTP debug logs, which may contain provider tokens.
 
@@ -70,7 +74,7 @@ Use `GET /accounts` to list connected accounts. Each account has its own local I
 
 ## View channel analytics
 
-Open **Analytics** in the workspace to choose a 7, 30, or 90 day period. YouTube shows channel totals, views, likes, comments, subscriber gains, and top videos from YouTube Analytics. Instagram shows likes and comments on media published during the selected period, ranked by interactions. Instagram reach and impressions are not included. Analytics are fetched from the connected providers and require an unlocked workspace; YouTube's Analytics API must be enabled in the Google Cloud project.
+Open **Analytics** in the workspace to choose a 7, 30, or 90 day period. YouTube shows channel totals, views, likes, comments, subscriber gains, and top videos from YouTube Analytics. Instagram shows likes and comments on media published during the selected period, ranked by interactions. Instagram reach and impressions are not included. Analytics are fetched from the connected providers and require a logged-in account; YouTube's Analytics API must be enabled in the Google Cloud project.
 
 Access tokens refresh automatically **when used** near expiry (YouTube: two minutes, Instagram: one day). `POST /accounts/{id}/refresh` explicitly refreshes and saves the result. There is no background scheduler: an unused Instagram connection that expires must be reauthorized. A provider revocation or Google's `invalid_grant` also requires reconnecting.
 
@@ -143,9 +147,9 @@ The job atomically claims publication to prevent simultaneous requests from publ
 | GET | `/instagram/posts/{id}` | Fetch and persist container status |
 | POST | `/instagram/posts/{id}/publish` | Publish ready container |
 
-Account, OAuth-start, upload, and publishing operations require `X-API-Key` or an unlocked browser session. Cookie-authenticated mutations require an `Origin` matching `BASE_URL`, protecting against cross-site requests; header-authenticated API clients keep their original behavior. The frontend assets and `/session` status are public, but expose no service key, client secrets, or provider tokens. `POST /session` validates the service key to unlock, and `DELETE /session` locks the browser. Open the page on the exact configured `BASE_URL` so its origin and callback cookies match.
+Account, OAuth-start, upload, and publishing operations require a logged-in browser session or, for the legacy workspace, `X-API-Key`. Cookie-authenticated mutations require an `Origin` matching `BASE_URL`, protecting against cross-site requests; header-authenticated API clients keep their original behavior. The landing page, authentication pages, frontend assets, and `/session` status are public, but expose no service key, client secrets, or provider tokens. `POST /auth/signup` creates an account and first workspace; `POST /auth/login` logs in; `DELETE /session` revokes the current session. `GET /workspaces`, `POST /workspaces`, and `POST /workspaces/{id}/select` manage owned workspaces. Cookie-authenticated API requests can pin a workspace with `X-Workspace-ID`; ownership is always checked. Login and signup attempts are limited per email and client address over a 15-minute window. `POST /session` remains available for legacy service-key access. Open the page on the exact configured `BASE_URL` so its origin and callback cookies match.
 
-This is a **single-operator backend**, not a multi-tenant user-login system. Anyone holding the service key can access all connections. Bind locally by default. Before deploying publicly, add user authentication/account ownership, request rate limits, HTTPS and a reverse-proxy upload/body-size limit (especially for chunked requests), and use one worker: token-refresh locks are per process. Use a dedicated secret manager for deployed credentials. SQLite data is local and not a substitute for a backed-up production database.
+Relay supports **private accounts with multiple workspaces**. Anyone holding the service key can access the legacy workspace only. Bind locally by default. Public deployments need HTTPS and a reverse-proxy upload/body-size limit (especially for chunked requests). Use one worker: token-refresh locks are per process. Use a dedicated secret manager for deployed credentials. SQLite data is local and not a substitute for a backed-up production database.
 
 Provider errors are sanitized instead of returning raw responses that may contain tokens. HTTP 409 usually means consent must be renewed or the resource is not ready; HTTP 502 means a provider request failed. No real uploads or account authorizations run during tests.
 
@@ -163,7 +167,7 @@ upload default unsuitable here. Large video uploads need a different upload desi
 The private `aitryout-485605-relay-data` bucket stores encrypted SQLite snapshots.
 Each database transaction downloads the latest snapshot and uploads it only if changed,
 with a generation precondition preventing stale revisions from overwriting newer data.
-This is intended for a small single-operator workspace; keep concurrency and maximum
+This is intended for a small deployment; keep concurrency and maximum
 instances at one. Storage/API errors fail the request rather than silently losing writes.
 Local runs continue to use local SQLite. Existing local connections are not migrated;
 connect accounts on the deployed site.
@@ -174,7 +178,7 @@ frontend. Objects are readable by anyone with the URL so Meta can retrieve Insta
 `storage.googleapis.com` URLs. Local runs use ADC from the configured gcloud account.
 
 Credentials load from Secret Manager `relay-config`, version 1, mounted at `/secrets/relay/.env`.
-Unlock with your existing local `SERVICE_API_KEY`. No credentials, databases, or virtual
+Create an account to use private workspaces. Existing local `SERVICE_API_KEY` access is limited to the legacy workspace. No credentials, databases, or virtual
 environments are included in the public repository or container. The dedicated runtime
 identity can access only this app's secret and bucket through its assigned grants.
 

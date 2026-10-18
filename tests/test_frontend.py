@@ -80,8 +80,8 @@ def test_frontend_serves_packaged_assets_without_secrets(settings):
         response = client.get("/")
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
-        assert "Connect Instagram" in response.text
-        assert "Connect YouTube" in response.text
+        assert 'href="/login"' in response.text
+        assert 'href="/signup"' in response.text
         assert KEY not in response.text
         for asset in (
             "styles.css",
@@ -89,6 +89,8 @@ def test_frontend_serves_packaged_assets_without_secrets(settings):
             "favicon.svg",
             "oauth-popup.mjs",
             "oauth-complete.js",
+            "account.css",
+            "auth.js",
         ):
             assert client.get(f"/static/{asset}").status_code == 200
         assert "javascript" in client.get("/static/oauth-popup.mjs").headers["content-type"]

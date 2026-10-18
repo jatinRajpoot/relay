@@ -6,7 +6,7 @@ const names = { instagram: "Instagram", youtube: "YouTube" };
 let authenticated = false;
 let accountList = [];
 let contentItems = [];
-let pendingProvider = null;
+let activeWorkspaceId = null;
 let disconnecting = null;
 let instagramMediaConfigured = false;
 let contentStorageConfigured = false;
@@ -66,7 +66,9 @@ const oauthPopup = new OAuthPopup(window, async ({provider, result}) => {
 async function api(path, options = {}) {
   let response;
   try {
-    response = await fetch(path, { credentials: "same-origin", ...options });
+    const headers = new Headers(options.headers);
+    if (activeWorkspaceId) headers.set("X-Workspace-ID", activeWorkspaceId);
+    response = await fetch(path, { credentials: "same-origin", ...options, headers });
   } catch {
     throw new Error("Couldn't reach Relay. Check that the local service is running.");
   }
@@ -75,6 +77,7 @@ async function api(path, options = {}) {
     if (response.status === 401) {
       authenticated = false;
       renderSession();
+      window.location.replace("/login");
     }
     throw new Error(typeof data?.detail === "string" ? data.detail : "Something went wrong. Please try again.");
   }
@@ -135,7 +138,7 @@ function notice(message, error = false, action = null) {
 function renderSession() {
   const button = $("#session-button");
   button.classList.toggle("unlocked", authenticated);
-  button.querySelector("span").textContent = authenticated ? "Lock workspace" : "Unlock workspace";
+  button.querySelector("span").textContent = authenticated ? "Log out" : "Log in";
   button.querySelector("use").setAttribute("href", authenticated ? "#i-unlock" : "#i-lock");
   $("#empty-connect").textContent = authenticated ? "Connect a channel" : "Unlock workspace";
   $("#empty-description").textContent = authenticated
@@ -863,6 +866,8 @@ function syncPublishButtons() {
       ? "Delivery status"
       : "Publish to " + selected.length + (selected.length === 1 ? " channel" : " channels");
   $("#session-button").disabled = publishing;
+  $("#workspace-select").disabled = publishing;
+  $("#new-workspace").disabled = publishing;
   $("#content-file").disabled = !authenticated || !contentStorageConfigured || publishing;
   $("#content-upload-submit").disabled = !authenticated || !contentStorageConfigured || publishing;
   $("#publish-file").disabled = !authenticated || !contentStorageConfigured || publishing;
@@ -984,11 +989,8 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function showUnlock(provider = null) {
-  pendingProvider = provider;
-  $("#unlock-error").hidden = true;
-  $("#unlock-dialog").showModal();
-  $("#service-key").focus();
+function showUnlock() {
+  window.location.assign("/login");
 }
 
 function renderAccounts() {
@@ -1432,54 +1434,41 @@ document.querySelectorAll("[data-copy]").forEach((button) => {
     }
   });
 });
-$("#unlock-dialog").addEventListener("close", () => { $("#service-key").value = ""; });
+$("#session-button").addEventListener("click", () => lockWorkspace());
 
-$("#unlock-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const button = $("#unlock-submit");
-  button.disabled = true;
-  $("#unlock-error").hidden = true;
-  const provider = pendingProvider;
-  let popupOpened = false;
+$("#workspace-select").addEventListener("change", async (event) => {
+  const select = event.target;
+  select.disabled = true;
   try {
-    // The unlock submit is also a user gesture: reserve the popup before login awaits.
-    if (provider) {
-      if (!oauthPopup.open(provider)) return;
-      popupOpened = true;
-    }
-    await api("/session", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ service_key: $("#service-key").value.trim() }) });
-    authenticated = true;
-    $("#service-key").value = "";
-    $("#unlock-dialog").close();
-    renderSession();
-    await loadAccounts();
-    await loadContent();
-    if (authenticated) await loadPostHistory();
-    if (activePage === "analytics") await loadAnalytics();
-    pendingProvider = null;
-    if (provider) await connect(provider, true);
-    else if (!accountList.length) notice("Workspace unlocked. Connect a channel to get started.");
-    else if (!contentStorageConfigured) notice("Workspace unlocked. Media storage needs setup before you can publish.");
-    else if (!contentItems.length) notice("Workspace unlocked. Add a photo or video to get started.");
-    else notice("Workspace unlocked. You're ready to create a post.");
+    await api(`/workspaces/${encodeURIComponent(select.value)}/select`, { method: "POST" });
+    window.location.assign("/app");
   } catch (error) {
-    if (popupOpened) oauthPopup.close();
-    if ($("#unlock-dialog").open) {
-      $("#unlock-error").textContent = error.message;
-      $("#unlock-error").hidden = false;
-    } else notice(error.message, true);
-  } finally { button.disabled = false; }
+    select.value = activeWorkspaceId;
+    notice(error.message, true);
+    select.disabled = false;
+  }
 });
-
-$("#session-button").addEventListener("click", async () => {
-  if (!authenticated) { showUnlock(); return; }
+$("#new-workspace").addEventListener("click", () => {
+  $("#workspace-error").hidden = true;
+  $("#workspace-dialog").showModal();
+  $("#new-workspace-name").focus();
+});
+$("#workspace-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = $("#workspace-submit");
+  button.disabled = true;
+  $("#workspace-error").hidden = true;
   try {
-    await api("/session", { method: "DELETE" });
-    authenticated = false;
-    renderSession();
-    notice("Workspace locked. Your accounts are still safely connected.");
-  } catch (error) { notice(error.message, true); }
+    const workspace = await api("/workspaces", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: $("#new-workspace-name").value.trim() }),
+    });
+    await api(`/workspaces/${workspace.id}/select`, { method: "POST" });
+    window.location.assign("/app");
+  } catch (error) {
+    $("#workspace-error").textContent = error.message;
+    $("#workspace-error").hidden = false;
+  } finally { button.disabled = false; }
 });
 
 $("#reload-accounts").addEventListener("click", async () => {
@@ -1869,8 +1858,8 @@ const paletteCommands = [
   { label: "Channels", hint: "Connect accounts", icon: "link", group: "Go to", run: () => setPage("connections") },
   { label: "Analytics", hint: "Performance", icon: "chart", group: "Go to", run: () => setPage("analytics") },
   { label: "Post history", hint: "Recent posts and statuses", icon: "history", group: "Go to", run: () => setPage("history") },
-  { label: "Unlock workspace", hint: "Enter service key", icon: "lock", group: "Actions", run: () => showUnlock() },
-  { label: "Lock workspace", hint: "Sign out of this browser", icon: "lock", group: "Actions", run: () => lockWorkspace() },
+  { label: "Log in", hint: "Open your account", icon: "lock", group: "Actions", run: () => showUnlock() },
+  { label: "Log out", hint: "Sign out of this browser", icon: "lock", group: "Actions", run: () => lockWorkspace() },
   { label: "Connect Instagram", hint: "OAuth popup", icon: "instagram", group: "Actions", run: () => connect("instagram") },
   { label: "Connect YouTube", hint: "OAuth popup", icon: "youtube", group: "Actions", run: () => connect("youtube") },
   { label: "Setup guide", hint: "Callback URLs", icon: "book", group: "Actions", run: () => $("#setup-dialog").showModal() },
@@ -1968,7 +1957,7 @@ async function lockWorkspace() {
     await api("/session", { method: "DELETE" });
     authenticated = false;
     renderSession();
-    notice("Workspace locked. Your accounts are still connected.");
+    window.location.replace("/");
   } catch (error) { notice(error.message, true); }
 }
 
@@ -2006,6 +1995,18 @@ async function initialize() {
     setPage(["overview", "analytics", "history", "connections", "content", "publish"].includes(initialPage) ? initialPage : "overview", { recordHistory: false });
     const state = await api("/session");
     authenticated = state.authenticated;
+    if (!authenticated) { window.location.replace("/login"); return; }
+    activeWorkspaceId = state.workspace?.id || null;
+    $("#workspace-tools").hidden = !state.user;
+    $("#account-label").textContent = state.user?.name || "Legacy workspace";
+    $("#account-label").title = state.user?.email || "Service key access";
+    for (const workspace of state.workspaces || []) {
+      const option = document.createElement("option");
+      option.value = workspace.id;
+      option.textContent = workspace.name;
+      $("#workspace-select").append(option);
+    }
+    if (activeWorkspaceId) $("#workspace-select").value = activeWorkspaceId;
     instagramMediaConfigured = state.publishing?.instagram_media_configured === true;
     contentStorageConfigured = state.publishing?.content_storage_configured === true;
     maxUploadBytes = state.publishing?.max_upload_bytes || 0;

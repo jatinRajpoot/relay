@@ -8,6 +8,7 @@
   <title>Home · Relay</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/account.css">
   <script>document.documentElement.dataset.theme = "dark";</script>
   <script src="/static/app.js" type="module"></script>
 </head>
@@ -92,15 +93,20 @@
     <div class="stage">
       <header class="topbar">
         <div class="topbar-title">
-          <span class="topbar-kicker">Workspace</span>
+          <div class="workspace-tools" id="workspace-tools" hidden>
+            <label class="visually-hidden" for="workspace-select">Active workspace</label>
+            <select id="workspace-select" aria-label="Active workspace"></select>
+            <button id="new-workspace" type="button" aria-label="Create a workspace">+ New</button>
+          </div>
           <strong id="breadcrumb-label">Home</strong>
         </div>
         <div class="topbar-actions">
+          <span class="account-label" id="account-label"></span>
           <button class="icon-button" id="palette-button" type="button" aria-label="Search and commands">
             <svg class="icon"><use href="#i-search"/></svg>
           </button>
           <button class="button button-ghost session-button" id="session-button" type="button">
-            <svg class="icon"><use href="#i-lock"/></svg><span>Unlock workspace</span>
+            <svg class="icon"><use href="#i-lock"/></svg><span>Log in</span>
           </button>
           <button class="icon-button" data-setup type="button" aria-label="Open setup guide">
             <svg class="icon"><use href="#i-book"/></svg>
@@ -120,7 +126,7 @@
             </div>
             <div class="intro-actions">
               <button class="button button-primary" id="overview-primary-action" type="button">
-                <svg class="icon"><use href="#i-lock"/></svg><span>Unlock workspace</span>
+                <svg class="icon"><use href="#i-lock"/></svg><span>Log in</span>
               </button>
             </div>
           </div>
@@ -153,7 +159,7 @@
                 <div class="card-head">
                   <div>
                     <h2 id="workflow-title">Get set up</h2>
-                    <p id="workflow-description">Unlock your workspace, then connect a channel to get started.</p>
+                    <p id="workflow-description">Log in to your account, then connect a channel to get started.</p>
                   </div>
                   <span class="pill" id="workflow-status">Unlock to begin</span>
                 </div>
@@ -262,8 +268,8 @@
                   <div id="composer-selected-attachment" class="selected-attachment" hidden></div>
                   <div id="composer-media-empty" class="empty-inline">
                     <span class="empty-inline-icon"><svg class="icon"><use href="#i-media"/></svg></span>
-                    <div><strong id="composer-media-empty-title">Unlock your workspace to see your media</strong><p id="composer-media-empty-copy">Your saved photos and videos will show here as visual previews.</p></div>
-                    <button class="button button-ghost button-sm" id="composer-media-action" type="button">Unlock workspace</button>
+                    <div><strong id="composer-media-empty-title">Log in to your account to see your media</strong><p id="composer-media-empty-copy">Your saved photos and videos will show here as visual previews.</p></div>
+                    <button class="button button-ghost button-sm" id="composer-media-action" type="button">Log in</button>
                   </div>
                   <div id="composer-media-grid" class="picker-grid" hidden></div>
                   <small id="composer-media-hint" class="composer-hint">Choose one item to continue.</small>
@@ -361,8 +367,8 @@
             <div id="empty-state" class="empty-state">
               <span class="empty-state-icon"><svg class="icon"><use href="#i-link"/></svg></span>
               <h3 id="empty-title">No channels connected yet</h3>
-              <p id="empty-description">Unlock your workspace to view or connect an account.</p>
-              <button class="button button-primary empty-connect" id="empty-connect" type="button">Unlock workspace</button>
+              <p id="empty-description">Log in to your account to view or connect an account.</p>
+              <button class="button button-primary empty-connect" id="empty-connect" type="button">Log in</button>
             </div>
           </section>
 
@@ -445,7 +451,7 @@
           <div id="analytics-locked" class="message-block">
             <span class="message-icon"><svg class="icon"><use href="#i-lock"/></svg></span>
             <div><strong>Unlock to view analytics.</strong><p>Connect a channel to load its metrics.</p></div>
-            <button class="button button-primary" id="analytics-unlock" type="button">Unlock workspace</button>
+            <button class="button button-primary" id="analytics-unlock" type="button">Log in</button>
           </div>
           <div id="analytics-loading" class="message-block" role="status" hidden>
             <span class="spinner" aria-hidden="true"></span>
@@ -478,7 +484,7 @@
           <div id="history-locked" class="message-block">
             <span class="message-icon"><svg class="icon"><use href="#i-lock"/></svg></span>
             <div><strong>Unlock to view post history.</strong><p>Your publishing activity stays private.</p></div>
-            <button class="button button-primary" id="history-unlock" type="button">Unlock workspace</button>
+            <button class="button button-primary" id="history-unlock" type="button">Log in</button>
           </div>
           <div id="history-loading" class="message-block" role="status" hidden>
             <span class="spinner" aria-hidden="true"></span>
@@ -533,24 +539,15 @@
     <div id="palette-list" class="palette-list" role="listbox" aria-label="Commands"></div>
   </dialog>
 
-  <!-- ── Unlock ───────────────────────────────────────────────── -->
-  <dialog id="unlock-dialog" class="dialog" aria-labelledby="unlock-title">
-    <div class="dialog-top">
-      <span class="dialog-icon"><svg class="icon"><use href="#i-lock"/></svg></span>
-      <button class="icon-button icon-button-sm" data-close="unlock-dialog" aria-label="Close">
-        <svg class="icon"><use href="#i-close"/></svg>
-      </button>
-    </div>
-    <h2 id="unlock-title">Unlock your workspace</h2>
-    <p>One key, entered once per browser session.</p>
-    <form id="unlock-form">
-      <label for="service-key">Service key</label>
-      <input id="service-key" name="service_key" type="password" required autocomplete="off" placeholder="Paste your service key" maxlength="1024">
-      <small>This is <code>SERVICE_API_KEY</code> in your project’s <code>.env</code> file.</small>
-      <p class="form-error" id="unlock-error" role="alert" hidden></p>
-      <button class="button button-primary button-block" id="unlock-submit" type="submit">
-        <span>Unlock workspace</span><svg class="icon"><use href="#i-arrow"/></svg>
-      </button>
+  <dialog id="workspace-dialog" class="dialog" aria-labelledby="workspace-title">
+    <div class="dialog-top"><span class="dialog-icon">↗</span><button class="icon-button" data-close="workspace-dialog" type="button" aria-label="Close">×</button></div>
+    <h2 id="workspace-title">A space for your next project.</h2>
+    <p>Each workspace has its own channels, media library, and post history.</p>
+    <form id="workspace-form">
+      <label for="new-workspace-name">Workspace name</label>
+      <input id="new-workspace-name" name="name" maxlength="80" placeholder="e.g. My brand" required>
+      <p id="workspace-error" class="form-error" role="alert" hidden></p>
+      <button id="workspace-submit" class="button button-primary button-block" type="submit">Create workspace ↗</button>
     </form>
   </dialog>
 

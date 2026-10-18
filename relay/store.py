@@ -5,6 +5,7 @@ import sqlite3
 import threading
 import time
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 from cryptography.fernet import Fernet
@@ -19,6 +20,8 @@ class Store:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
         self.cipher = Fernet(encryption_key.encode())
+        # Set by the authentication dependency, isolated for each async request.
+        self.workspace = ContextVar("relay_workspace", default="legacy")
         self._lock = threading.RLock()
         self._blob = None
         if bucket := os.getenv("DATABASE_BUCKET"):
@@ -46,7 +49,8 @@ class Store:
                     scopes TEXT NOT NULL,
                     token_updated_at INTEGER NOT NULL,
                     created_at INTEGER NOT NULL,
-                    UNIQUE(provider, external_id)
+                    workspace_id TEXT NOT NULL DEFAULT 'legacy',
+                    UNIQUE(workspace_id, provider, external_id)
                 );
                 CREATE TABLE IF NOT EXISTS instagram_posts (
                     id TEXT PRIMARY KEY,
@@ -94,6 +98,7 @@ class Store:
             account_columns = {row[1] for row in db.execute("PRAGMA table_info(accounts)")}
             if "avatar_url" not in account_columns:
                 db.execute("ALTER TABLE accounts ADD COLUMN avatar_url TEXT")
+            self._migrate_workspaces(db)
             post_columns = {row[1] for row in db.execute("PRAGMA table_info(instagram_posts)")}
             for column, declaration in (
                 ("media_type", "TEXT"),
@@ -117,6 +122,41 @@ class Store:
                 "CREATE INDEX IF NOT EXISTS post_history_published_at "
                 "ON post_history(published_at DESC, id DESC)"
             )
+
+    @staticmethod
+    def _migrate_workspaces(db):
+        # Rebuild the old unique constraint without cascading away existing jobs/history.
+        columns = {row[1] for row in db.execute("PRAGMA table_info(accounts)")}
+        if "workspace_id" not in columns:
+            db.commit()
+            db.execute("PRAGMA foreign_keys=OFF")
+            try:
+                with db:
+                    db.execute("BEGIN IMMEDIATE")
+                    db.execute("""CREATE TABLE accounts_scoped (
+                        id TEXT PRIMARY KEY,
+                        provider TEXT NOT NULL CHECK(provider IN ('youtube', 'instagram')),
+                        external_id TEXT NOT NULL, name TEXT NOT NULL,
+                        access_token TEXT NOT NULL, refresh_token TEXT,
+                        expires_at INTEGER NOT NULL, scopes TEXT NOT NULL,
+                        token_updated_at INTEGER NOT NULL, created_at INTEGER NOT NULL,
+                        avatar_url TEXT, workspace_id TEXT NOT NULL DEFAULT 'legacy',
+                        UNIQUE(workspace_id, provider, external_id)
+                    )""")
+                    db.execute("""INSERT INTO accounts_scoped
+                        SELECT id, provider, external_id, name, access_token, refresh_token,
+                        expires_at, scopes, token_updated_at, created_at, avatar_url, 'legacy'
+                        FROM accounts""")
+                    db.execute("DROP TABLE accounts")
+                    db.execute("ALTER TABLE accounts_scoped RENAME TO accounts")
+            finally:
+                db.execute("PRAGMA foreign_keys=ON")
+        for table in ("content_items", "oauth_states"):
+            columns = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+            if "workspace_id" not in columns:
+                db.execute(
+                    f"ALTER TABLE {table} ADD COLUMN workspace_id TEXT NOT NULL DEFAULT 'legacy'"
+                )
 
     @contextmanager
     def connection(self):
@@ -173,7 +213,7 @@ class Store:
         with self.connection() as db:
             db.execute("DELETE FROM oauth_states WHERE expires_at <= ?", (now,))
             db.execute(
-                "INSERT INTO oauth_states(state_hash, provider, browser_hash, verifier, expires_at, return_to_ui, popup) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO oauth_states(state_hash, provider, browser_hash, verifier, expires_at, return_to_ui, popup, workspace_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     digest(state),
                     provider,
@@ -182,6 +222,7 @@ class Store:
                     now + 600,
                     int(return_to_ui),
                     int(popup),
+                    self.workspace.get(),
                 ),
             )
         return state
@@ -192,7 +233,7 @@ class Store:
                 """
                 DELETE FROM oauth_states
                 WHERE state_hash=? AND provider=? AND browser_hash=? AND expires_at>?
-                RETURNING verifier, return_to_ui, popup
+                RETURNING verifier, return_to_ui, popup, workspace_id
             """,
                 (digest(state), provider, digest(browser), int(time.time())),
             ).fetchone()
@@ -201,6 +242,7 @@ class Store:
                 "verifier": self.decrypt(row["verifier"]),
                 "return_to_ui": bool(row["return_to_ui"]),
                 "popup": bool(row["popup"]),
+                **({"workspace_id": row["workspace_id"]} if row["workspace_id"] != "legacy" else {}),
             }
             if row
             else None
@@ -213,9 +255,9 @@ class Store:
                 """
                 INSERT INTO accounts (
                     id, provider, external_id, name, access_token, refresh_token,
-                    expires_at, scopes, token_updated_at, created_at, avatar_url
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(provider, external_id) DO UPDATE SET
+                    expires_at, scopes, token_updated_at, created_at, avatar_url, workspace_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(workspace_id, provider, external_id) DO UPDATE SET
                     name=excluded.name, access_token=excluded.access_token,
                     refresh_token=COALESCE(excluded.refresh_token, accounts.refresh_token),
                     expires_at=excluded.expires_at, scopes=excluded.scopes,
@@ -234,22 +276,29 @@ class Store:
                     now,
                     now,
                     avatar_url,
+                    self.workspace.get(),
                 ),
             )
             row = db.execute(
-                "SELECT * FROM accounts WHERE provider=? AND external_id=?",
-                (provider, str(external_id)),
+                "SELECT * FROM accounts WHERE provider=? AND external_id=? AND workspace_id=?",
+                (provider, str(external_id), self.workspace.get()),
             ).fetchone()
         return dict(row)
 
     def get_account(self, account_id):
         with self.connection() as db:
-            row = db.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone()
+            row = db.execute(
+                "SELECT * FROM accounts WHERE id=? AND workspace_id=?",
+                (account_id, self.workspace.get()),
+            ).fetchone()
         return dict(row) if row else None
 
     def list_accounts(self):
         with self.connection() as db:
-            return [dict(row) for row in db.execute("SELECT * FROM accounts ORDER BY created_at")]
+            return [dict(row) for row in db.execute(
+                "SELECT * FROM accounts WHERE workspace_id=? ORDER BY created_at",
+                (self.workspace.get(),),
+            )]
 
     def update_account_avatar(self, account_id, avatar_url):
         with self.connection() as db:
@@ -279,7 +328,10 @@ class Store:
 
     def delete_account(self, account_id):
         with self.connection() as db:
-            return db.execute("DELETE FROM accounts WHERE id=?", (account_id,)).rowcount > 0
+            return db.execute(
+                "DELETE FROM accounts WHERE id=? AND workspace_id=?",
+                (account_id, self.workspace.get()),
+            ).rowcount > 0
 
     @staticmethod
     def public_account(account):
@@ -312,7 +364,10 @@ class Store:
 
     def get_post(self, post_id):
         with self.connection() as db:
-            row = db.execute("SELECT * FROM instagram_posts WHERE id=?", (post_id,)).fetchone()
+            row = db.execute(
+                "SELECT p.* FROM instagram_posts p JOIN accounts a ON a.id=p.account_id "
+                "WHERE p.id=? AND a.workspace_id=?", (post_id, self.workspace.get()),
+            ).fetchone()
         return dict(row) if row else None
 
     def update_post(self, post_id, status, media_id=None):
@@ -411,10 +466,11 @@ class Store:
                     SELECT history.*, accounts.name AS account_name
                     FROM post_history AS history
                     JOIN accounts ON accounts.id=history.account_id
+                    WHERE accounts.workspace_id=?
                     ORDER BY history.published_at DESC, history.id DESC
                     LIMIT ?
                     """,
-                    (limit,),
+                    (self.workspace.get(), limit),
                 )
             ]
 
@@ -436,21 +492,28 @@ class Store:
         with self.connection() as db:
             db.execute(
                 """
-                INSERT INTO content_items(id, filename, content_type, size, object_name, media_url, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO content_items(id, filename, content_type, size, object_name, media_url, created_at, workspace_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (content_id, filename, content_type, size, object_name, media_url, created_at),
+                (content_id, filename, content_type, size, object_name, media_url, created_at,
+                 self.workspace.get()),
             )
         return self.get_content_item(content_id)
 
     def get_content_item(self, content_id):
         with self.connection() as db:
-            row = db.execute("SELECT * FROM content_items WHERE id=?", (content_id,)).fetchone()
+            row = db.execute(
+                "SELECT * FROM content_items WHERE id=? AND workspace_id=?",
+                (content_id, self.workspace.get()),
+            ).fetchone()
         return dict(row) if row else None
 
     def list_content_items(self):
         with self.connection() as db:
             return [
                 dict(row)
-                for row in db.execute("SELECT * FROM content_items ORDER BY created_at DESC, id DESC")
+                for row in db.execute(
+                    "SELECT * FROM content_items WHERE workspace_id=? ORDER BY created_at DESC, id DESC",
+                    (self.workspace.get(),),
+                )
             ]

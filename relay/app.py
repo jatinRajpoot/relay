@@ -1,5 +1,6 @@
 import asyncio
 import mimetypes
+import re
 import secrets
 import time
 from contextlib import asynccontextmanager
@@ -21,6 +22,7 @@ from pydantic import BaseModel, Field, HttpUrl, field_validator
 from starlette.datastructures import Headers
 
 from relay.config import Settings
+from relay.identity import SESSION_SECONDS, Identity
 from relay.providers import Providers
 from relay.store import Store, digest
 
@@ -46,9 +48,45 @@ class UnlockRequest(BaseModel):
     service_key: str = Field(min_length=1, max_length=1024, repr=False)
 
 
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=128, repr=False)
+
+    @field_validator("email")
+    @classmethod
+    def normalized_email(cls, value):
+        value = value.strip().lower()
+        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
+            raise ValueError("Enter a valid email address.")
+        return value
+
+
+class WorkspaceRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+    @field_validator("name")
+    @classmethod
+    def trimmed_name(cls, value):
+        if not value.strip():
+            raise ValueError("Enter a name.")
+        return value.strip()
+
+
+class SignupRequest(LoginRequest):
+    password: str = Field(min_length=12, max_length=128, repr=False)
+    name: str = Field(min_length=1, max_length=80)
+    workspace_name: str = Field(default="My workspace", min_length=1, max_length=80)
+
+    @field_validator("name", "workspace_name")
+    @classmethod
+    def trimmed_name(cls, value):
+        return WorkspaceRequest.trimmed_name(value)
+
+
 def create_app(settings: Settings | None = None, transport=None):
     settings = settings or Settings.from_env()
     store = Store(settings.database_path, settings.encryption_key)
+    identity = Identity(store)
     refresh_locks: dict[str, asyncio.Lock] = {}
 
     @asynccontextmanager
@@ -67,8 +105,8 @@ def create_app(settings: Settings | None = None, transport=None):
         title="Relay OAuth & Publishing",
         version="0.1.0",
         lifespan=lifespan,
-        description="Single-operator Instagram and YouTube account connections and publishing. "
-        "Authorize protected operations with the SERVICE_API_KEY from .env.",
+        description="Account-based Instagram and YouTube publishing with private workspaces. "
+        "The service API key accesses only the legacy workspace.",
     )
     app.state.store = store
     frontend = Path(__file__).parent / "static"
@@ -76,12 +114,20 @@ def create_app(settings: Settings | None = None, transport=None):
     session_cookie = "relay_session"
     session_marker = f"relay-browser:{digest(settings.api_key)}".encode()
 
-    def has_session(request):
+    def legacy_session(request):
         try:
             token = request.cookies.get(session_cookie, "").encode()
             return secrets.compare_digest(store.cipher.decrypt(token, ttl=8 * 3600), session_marker)
         except (InvalidToken, ValueError, TypeError):
             return False
+
+    def user_session(request):
+        return identity.session(
+            request.cookies.get(session_cookie, ""), request.headers.get("x-workspace-id")
+        )
+
+    def has_session(request):
+        return bool(user_session(request) or legacy_session(request))
 
     def same_origin(request):
         expected = urlsplit(settings.base_url)
@@ -106,14 +152,17 @@ def create_app(settings: Settings | None = None, transport=None):
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
 
-    def require_key(request: Request, key: Annotated[str | None, Depends(ApiKey)]):
+    async def require_key(request: Request, key: Annotated[str | None, Depends(ApiKey)]):
         if key and secrets.compare_digest(key.encode(), settings.api_key.encode()):
+            store.workspace.set("legacy")
             return
-        if has_session(request):
+        user = user_session(request)
+        if user or legacy_session(request):
             if request.method not in {"GET", "HEAD", "OPTIONS"}:
                 same_origin(request)
+            store.workspace.set(user["workspace_id"] if user else "legacy")
             return
-        raise HTTPException(401, "Unlock your workspace or supply a valid X-API-Key.")
+        raise HTTPException(401, "Log in to continue.")
 
     protected = [Depends(require_key)]
 
@@ -182,13 +231,78 @@ def create_app(settings: Settings | None = None, transport=None):
         return {"status": "ok"}
 
     @app.get("/", tags=["Service"])
-    async def index():
+    async def index(request: Request):
+        return FileResponse(frontend / ("index.html" if has_session(request) else "landing.html"))
+
+    @app.get("/app", include_in_schema=False)
+    async def dashboard(request: Request):
+        if not has_session(request):
+            return RedirectResponse("/login", status_code=303)
         return FileResponse(frontend / "index.html")
+
+    @app.get("/login", include_in_schema=False)
+    @app.get("/signup", include_in_schema=False)
+    async def auth_page(request: Request):
+        if has_session(request):
+            return RedirectResponse("/app", status_code=303)
+        return FileResponse(frontend / "auth.html")
+
+    def set_session(response, token):
+        response.set_cookie(
+            session_cookie, token, max_age=SESSION_SECONDS, httponly=True,
+            secure=settings.base_url.startswith("https://"), samesite="lax", path="/",
+        )
+
+    @app.post("/auth/signup", tags=["Account"], status_code=201)
+    async def signup(body: SignupRequest, request: Request, response: Response):
+        same_origin(request)
+        identity.throttle(request.client.host if request.client else "unknown", body.email)
+        user_id, workspace_id = identity.signup(
+            body.email, body.password, body.name, body.workspace_name
+        )
+        set_session(response, identity.new_session(
+            user_id, workspace_id, request.cookies.get(session_cookie, "")
+        ))
+        return {"authenticated": True}
+
+    @app.post("/auth/login", tags=["Account"])
+    async def login(body: LoginRequest, request: Request, response: Response):
+        same_origin(request)
+        identity.throttle(request.client.host if request.client else "unknown", body.email)
+        user_id, workspace_id = identity.login(body.email, body.password)
+        set_session(response, identity.new_session(
+            user_id, workspace_id, request.cookies.get(session_cookie, "")
+        ))
+        return {"authenticated": True}
+
+    def require_user(request):
+        user = user_session(request)
+        if not user:
+            raise HTTPException(401, "Log in with your email to manage workspaces.")
+        return user
+
+    @app.get("/workspaces", dependencies=protected, tags=["Workspace"])
+    async def workspaces(request: Request):
+        return {"workspaces": identity.workspaces(require_user(request)["id"])}
+
+    @app.post("/workspaces", dependencies=protected, tags=["Workspace"], status_code=201)
+    async def create_workspace(body: WorkspaceRequest, request: Request):
+        return identity.create_workspace(require_user(request)["id"], body.name)
+
+    @app.post("/workspaces/{workspace_id}/select", dependencies=protected, tags=["Workspace"])
+    async def select_workspace(workspace_id: str, request: Request):
+        require_user(request)
+        identity.select_workspace(request.cookies.get(session_cookie, ""), workspace_id)
+        return {"workspace_id": workspace_id}
 
     @app.get("/session", tags=["Workspace"])
     async def session(request: Request):
+        user = user_session(request)
         return {
-            "authenticated": has_session(request),
+            "authenticated": bool(user or legacy_session(request)),
+            "user": {key: user[key] for key in ("id", "name", "email")} if user else None,
+            "workspace": user["workspace"] if user else None,
+            "workspaces": identity.workspaces(user["id"]) if user else [],
             "providers": {
                 provider: {
                     "configured": all(settings.credentials(provider)),
@@ -223,7 +337,8 @@ def create_app(settings: Settings | None = None, transport=None):
         return {"authenticated": True}
 
     @app.delete("/session", dependencies=protected, tags=["Workspace"], status_code=204)
-    async def lock_workspace(response: Response):
+    async def lock_workspace(request: Request, response: Response):
+        identity.logout(request.cookies.get(session_cookie, ""))
         response.delete_cookie(session_cookie, path="/")
         response.status_code = 204
         return response
@@ -280,6 +395,7 @@ def create_app(settings: Settings | None = None, transport=None):
             raise HTTPException(
                 400, "Invalid, expired, or reused OAuth state. Start again in this browser."
             )
+        store.workspace.set(saved.get("workspace_id", "legacy"))
         try:
             if error:
                 raise HTTPException(
