@@ -127,7 +127,18 @@ def create_app(settings: Settings | None = None, transport=None):
         )
 
     def has_session(request):
-        return bool(user_session(request) or legacy_session(request))
+        token = request.cookies.get(session_cookie, "")
+        try:
+            if user_session(request) or legacy_session(request):
+                return True
+        except HTTPException:
+            # A stale X-Workspace-ID pin must not 404 the HTML shell. Fall back to the
+            # session's own workspace; API routes still reject the pin.
+            try:
+                return bool(identity.session(token))
+            except HTTPException:
+                return False
+        return False
 
     def same_origin(request):
         expected = urlsplit(settings.base_url)
