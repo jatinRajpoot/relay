@@ -27,8 +27,9 @@ let historyRequestId = 0;
 let analyticsDays = 30;
 let selectedContentId = null;
 let selectedAccountIds = new Set();
-let activeDetailsTab = "instagram";
-let showMediaPicker = false;
+let activeDetailsTab = "master";
+let activePreviewPlatform = "instagram";
+let historyFilter = "all";
 let publishing = false;
 let activePage = "overview";
 const providerConfigured = { instagram: true, youtube: true };
@@ -137,9 +138,11 @@ function notice(message, error = false, action = null) {
 
 function renderSession() {
   const button = $("#session-button");
-  button.classList.toggle("unlocked", authenticated);
-  button.querySelector("span").textContent = authenticated ? "Log out" : "Log in";
-  button.querySelector("use").setAttribute("href", authenticated ? "#i-unlock" : "#i-lock");
+  button.classList.remove("unlocked");
+  button.setAttribute("aria-label", authenticated ? "Lock workspace" : "Unlock workspace");
+  button.title = authenticated ? "Lock workspace" : "Unlock workspace";
+  button.querySelector("span").textContent = authenticated ? "Lock workspace" : "Unlock workspace";
+  button.querySelector("use").setAttribute("href", authenticated ? "#i-lock" : "#i-unlock");
   $("#empty-connect").textContent = authenticated ? "Connect a channel" : "Unlock workspace";
   $("#empty-description").textContent = authenticated
     ? "Connect Instagram or YouTube to start publishing."
@@ -206,7 +209,7 @@ function renderWorkspaceFlow() {
     media: hasChannel ? (hasMedia ? "complete" : "current") : "upcoming",
     publish: hasMedia ? "current" : "upcoming",
   };
-  $("#workflow-card").hidden = hasChannel && hasMedia;
+  $("#workflow-card").hidden = hasChannel;
   document.querySelectorAll("[data-flow-step]").forEach((step, index) => {
     const state = states[step.dataset.flowStep];
     step.dataset.flowState = state;
@@ -314,7 +317,7 @@ function renderOverview() {
   if (authenticated && contentStorageConfigured && contentItems.length) {
     mediaEmpty.hidden = true;
     mediaList.hidden = false;
-    for (const item of contentItems.slice(0, 3)) mediaList.append(makeOverviewMediaRow(item));
+    for (const item of contentItems.slice(0, 4)) mediaList.append(makeOverviewMediaRow(item));
   } else {
     mediaEmpty.hidden = false;
     mediaList.hidden = true;
@@ -513,19 +516,20 @@ function setPage(page, { recordHistory = true } = {}) {
   document.querySelectorAll("[data-nav]").forEach((item) => {
     const selected = item.dataset.nav === page;
     if (item.classList.contains("nav-item")) item.classList.toggle("active", selected);
+    if (item.classList.contains("rail-create")) item.classList.toggle("active", selected);
     if (item.matches("a")) {
-      if (selected && (item.classList.contains("nav-item") || item.classList.contains("nav-more-link"))) item.setAttribute("aria-current", "page");
+      if (selected && (item.classList.contains("nav-item") || item.classList.contains("nav-more-link") || item.classList.contains("rail-create"))) item.setAttribute("aria-current", "page");
       else item.removeAttribute("aria-current");
     }
   });
-  const pageLabels = { overview: "Home", analytics: "Analytics", history: "Post history", connections: "Channels", content: "Media library", publish: "Create a post" };
+  const pageLabels = { overview: "Overview", analytics: "Analytics", history: "History", connections: "Channels", content: "Media", publish: "Create a post" };
   $("#breadcrumb-label").textContent = pageLabels[page];
   document.title = `${pageLabels[page]} · Relay`;
   if (window.location.hash !== `#${page}`) {
     const update = recordHistory ? "pushState" : "replaceState";
     window.history[update]({}, "", `#${page}`);
   }
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  $("#main-content").scrollTop = 0;
   if (page === "analytics") void loadAnalytics();
   if (page === "history") void loadPostHistory();
 }
@@ -611,28 +615,21 @@ function renderComposerMedia() {
       node.preload = "metadata";
     }
     preview.append(node);
-    const copy = document.createElement("span");
-    copy.className = "attachment-copy";
-    const name = document.createElement("strong");
-    name.textContent = item.filename;
-    const metadata = document.createElement("small");
-    metadata.textContent = mediaKind(item) + " · " + formatBytes(item.size);
-    copy.append(name, metadata);
-    const change = document.createElement("button");
-    change.className = "button button-secondary button-sm";
-    change.type = "button";
-    change.textContent = showMediaPicker ? "Done" : "Change";
-    change.addEventListener("click", () => {
-      showMediaPicker = !showMediaPicker;
-      renderComposerMedia();
+    const remove = document.createElement("button");
+    remove.className = "attachment-remove";
+    remove.type = "button";
+    remove.setAttribute("aria-label", "Remove attached media");
+    remove.textContent = "×";
+    remove.addEventListener("click", () => {
+      selectedContentId = null;
+      renderComposer();
     });
-    attachment.append(preview, copy, change);
+    attachment.append(preview, remove);
     attachment.hidden = false;
     empty.hidden = true;
-    grid.hidden = !showMediaPicker;
+    grid.hidden = false;
   } else {
     attachment.hidden = true;
-    showMediaPicker = false;
     if (!contentItems.length) {
       emptyTitle.textContent = "Your library is ready for a first upload";
       emptyCopy.textContent = "Upload a photo or video above. It will appear here as a preview.";
@@ -640,8 +637,8 @@ function renderComposerMedia() {
       grid.hidden = true;
       return;
     }
-    empty.hidden = true;
-    grid.hidden = false;
+    empty.hidden = !contentItems.length;
+    grid.hidden = !contentItems.length;
   }
   for (const item of contentItems) {
     const option = document.createElement("button");
@@ -678,11 +675,7 @@ function renderComposerMedia() {
     filename.textContent = item.filename;
     const metadata = document.createElement("small");
     metadata.textContent = `${mediaKind(item)} · ${formatBytes(item.size)}`;
-    const platforms = document.createElement("span");
-    platforms.className = "composer-media-platforms";
-    if (item.instagram_compatible) platforms.append(makeMediaTag("Instagram", "instagram"));
-    if (item.youtube_compatible) platforms.append(makeMediaTag("YouTube", "youtube"));
-    details.append(filename, metadata, platforms);
+    details.append(filename, metadata);
     const selected = document.createElement("span");
     selected.className = "media-selected-mark";
     selected.textContent = "✓";
@@ -694,7 +687,8 @@ function renderComposerMedia() {
 
 function selectComposerMedia(item) {
   if (publishing) return;
-  showMediaPicker = false;
+  const picker = $("#media-picker-dialog");
+  if (picker.open) picker.close();
   if (selectedContentId === item.id) {
     selectedContentId = null;
   } else {
@@ -732,13 +726,7 @@ function renderComposerDestinations() {
     const name = document.createElement("span");
     name.className = "profile-pill-name";
     name.textContent = account.name;
-    const platform = document.createElement("span");
-    platform.className = "profile-pill-platform " + account.provider;
-    platform.append(icon(account.provider));
-    const check = document.createElement("span");
-    check.className = "profile-pill-check";
-    check.textContent = "✓";
-    choice.append(checkbox, makeProfileAvatar(account, account.provider), name, platform, check);
+    choice.append(checkbox, makeProfileAvatar(account, account.provider), name);
     container.append(choice);
   }
   if (!accountList.length) {
@@ -749,10 +737,18 @@ function renderComposerDestinations() {
   }
   const selected = accountList.filter((account) => selectedAccountIds.has(account.id));
   $("#selected-account-count").textContent = selected.length + " selected";
+  $("#composer-action-summary").textContent = `Posting to ${selected.length} ${selected.length === 1 ? "channel" : "channels"}`;
 }
 
 function renderComposerDetails() {
-  $("#instagram-details").hidden = activeDetailsTab !== "instagram";
+  const selected = accountList.filter((account) => selectedAccountIds.has(account.id));
+  const hasInstagram = selected.some((account) => account.provider === "instagram");
+  const hasYoutube = selected.some((account) => account.provider === "youtube");
+  $("#instagram-tab").hidden = !hasInstagram;
+  $("#youtube-tab").hidden = !hasYoutube;
+  if ((activeDetailsTab === "instagram" && !hasInstagram) || (activeDetailsTab === "youtube" && !hasYoutube)) activeDetailsTab = "master";
+  $("#instagram-details").hidden = activeDetailsTab === "youtube";
+  $("#instagram-details").setAttribute("aria-labelledby", activeDetailsTab === "instagram" ? "instagram-tab" : "master-tab");
   $("#youtube-details").hidden = activeDetailsTab !== "youtube";
   document.querySelectorAll("[data-details-tab]").forEach((tab) => {
     const active = tab.dataset.detailsTab === activeDetailsTab;
@@ -766,6 +762,9 @@ function renderComposerDetails() {
   $("#youtube-publish-description").disabled = publishing;
   $("#youtube-publish-privacy").disabled = publishing;
   $("#youtube-made-for-kids").disabled = publishing;
+  const isYoutube = activeDetailsTab === "youtube";
+  $("#active-character-count").textContent = String(isYoutube ? $("#youtube-publish-title").value.length : $("#publish-caption").value.length);
+  $("#active-character-limit").textContent = isYoutube ? "/ 100" : "/ 2,200";
 }
 
 function renderComposerPreview() {
@@ -776,7 +775,7 @@ function renderComposerPreview() {
     media.classList.add("has-media");
     const node = document.createElement(item.content_type.startsWith("image/") ? "img" : "video");
     node.src = item.media_url;
-    node.alt = item.content_type.startsWith("image/") ? item.filename : "Selected video preview";
+    node.alt = "Post media preview";
     if (node instanceof HTMLVideoElement) {
       node.muted = true;
       node.controls = true;
@@ -784,7 +783,7 @@ function renderComposerPreview() {
       node.preload = "metadata";
     }
     media.append(node);
-    $("#preview-file-name").textContent = item.filename;
+    $("#preview-file-name").textContent = "Media attached";
     $("#preview-file-meta").textContent = `${mediaKind(item)} · ${formatBytes(item.size)}`;
   } else {
     media.classList.remove("has-media");
@@ -798,29 +797,42 @@ function renderComposerPreview() {
   const targets = $("#composer-preview-destinations");
   targets.replaceChildren();
   $("#preview-target-count").textContent = selected.length ? `${selected.length} selected` : "No profiles yet";
-  if (selected.length) {
-    for (const account of selected) {
-      const chip = document.createElement("span");
-      chip.className = "preview-destination-chip";
-      chip.append(makeProfileAvatar(account, account.provider, "tiny"));
-      const name = document.createElement("span");
-      name.textContent = account.name;
-      chip.append(name);
-      targets.append(chip);
-    }
+  const availableProviders = [...new Set(selected.map((account) => account.provider))];
+  document.querySelectorAll("[data-preview-platform]").forEach((tab) => {
+    tab.hidden = availableProviders.length > 0 && !availableProviders.includes(tab.dataset.previewPlatform);
+    const active = tab.dataset.previewPlatform === activePreviewPlatform;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", String(active));
+  });
+  if (availableProviders.length && !availableProviders.includes(activePreviewPlatform)) activePreviewPlatform = availableProviders[0];
+  document.querySelectorAll("[data-preview-platform]").forEach((tab) => {
+    const active = tab.dataset.previewPlatform === activePreviewPlatform;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", String(active));
+  });
+  const account = selected.find((candidate) => candidate.provider === activePreviewPlatform) || selected[0];
+  const accountName = $("#composer-preview-account");
+  const avatarSlot = $("#composer-preview-account-avatar");
+  if (account) {
+    accountName.textContent = account.name;
+    const avatar = makeProfileAvatar(account, account.provider, "preview-account-avatar");
+    avatar.id = "composer-preview-account-avatar";
+    avatarSlot.replaceWith(avatar);
   } else {
-    const placeholder = document.createElement("span");
-    placeholder.className = "preview-placeholder";
-    placeholder.textContent = "Your selected profiles will show here";
-    targets.append(placeholder);
+    accountName.textContent = "Select a channel";
+    avatarSlot.replaceChildren(document.createTextNode("R"));
+    avatarSlot.className = "profile-avatar";
   }
+  const title = $("#composer-preview-title");
   const copy = $("#composer-preview-copy");
-  if (copy) {
-    const instagramSelected = selected.some((account) => account.provider === "instagram");
-    const youtubeSelected = selected.some((account) => account.provider === "youtube");
-    if (youtubeSelected && $("#youtube-publish-title").value.trim()) copy.textContent = $("#youtube-publish-title").value.trim();
-    else if (instagramSelected && $("#publish-caption").value.trim()) copy.textContent = $("#publish-caption").value.trim();
-    else copy.textContent = "Your post text preview will appear here.";
+  if (activePreviewPlatform === "youtube" && $("#youtube-publish-title").value.trim()) {
+    title.textContent = $("#youtube-publish-title").value.trim();
+    title.hidden = false;
+    copy.textContent = $("#youtube-publish-description").value.trim() || $("#publish-caption").value.trim() || "Your description will appear here.";
+  } else {
+    title.textContent = "";
+    title.hidden = true;
+    copy.textContent = $("#publish-caption").value.trim() || "Your caption will appear here.";
   }
 }
 
@@ -833,6 +845,7 @@ function renderComposer() {
   renderComposerDetails();
   renderComposerPreview();
   syncPublishButtons();
+  $("#active-character-count").textContent = String(activeDetailsTab === "youtube" ? $("#youtube-publish-title").value.length : $("#publish-caption").value.length);
 }
 
 function renderComposerWorkflow() {
@@ -935,25 +948,32 @@ function makeMediaCard(item, { compact = false } = {}) {
     video.preload = "metadata";
     video.playsInline = true;
     preview.append(video);
+    const duration = document.createElement("span");
+    duration.className = "duration-badge";
+    duration.textContent = "Video";
+    video.addEventListener("loadedmetadata", () => {
+      if (Number.isFinite(video.duration)) {
+        const seconds = Math.floor(video.duration);
+        duration.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+      }
+    }, { once: true });
+    preview.append(duration);
   }
   const details = document.createElement("div");
   details.className = "media-details";
   const filename = document.createElement("strong");
   filename.textContent = item.filename;
   const metadata = document.createElement("small");
-  metadata.textContent = `${item.content_type} · ${formatBytes(item.size)}`;
-  const tags = document.createElement("div");
-  tags.className = "media-tags";
-  if (item.instagram_compatible) tags.append(makeMediaTag("Instagram", "instagram"));
-  if (item.youtube_compatible) tags.append(makeMediaTag("YouTube", "youtube"));
-  details.append(filename, metadata, tags);
+  metadata.textContent = formatBytes(item.size);
+  details.append(filename, metadata);
   card.append(preview, details);
   return card;
 }
 
 function makeOverviewMediaRow(item) {
-  const row = document.createElement("div");
-  row.className = "overview-media-row";
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "overview-media-tile";
   const preview = document.createElement("span");
   preview.className = "overview-media-thumb";
   const node = document.createElement(item.content_type.startsWith("image/") ? "img" : "video");
@@ -973,6 +993,7 @@ function makeOverviewMediaRow(item) {
   meta.textContent = mediaKind(item) + " · " + formatBytes(item.size);
   copy.append(title, meta);
   row.append(preview, copy);
+  row.addEventListener("click", () => setPage("content"));
   return row;
 }
 
@@ -987,6 +1008,53 @@ function formatBytes(bytes) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function localDraftKey() {
+  return `relay:draft:${activeWorkspaceId || "legacy"}`;
+}
+
+function readLocalDraft() {
+  try {
+    const value = localStorage.getItem(localDraftKey());
+    return value ? JSON.parse(value) : null;
+  } catch { return null; }
+}
+
+function saveLocalDraft() {
+  const draft = {
+    caption: $("#publish-caption").value,
+    title: $("#youtube-publish-title").value,
+    description: $("#youtube-publish-description").value,
+    visibility: $("#youtube-publish-privacy").value,
+    madeForKids: $("#youtube-made-for-kids").checked,
+    selectedContentId,
+    selectedAccountIds: [...selectedAccountIds],
+    savedAt: Date.now(),
+  };
+  try {
+    localStorage.setItem(localDraftKey(), JSON.stringify(draft));
+    $("#draft-status").textContent = "Saved";
+    if (historyLoaded) renderPostHistory();
+    notice("Draft saved in this browser.");
+  } catch {
+    $("#draft-status").textContent = "Could not save";
+    notice("The draft could not be saved in this browser.", true);
+  }
+}
+
+function restoreLocalDraft(draft = readLocalDraft()) {
+  if (!draft) return;
+  $("#publish-caption").value = draft.caption || "";
+  $("#youtube-publish-title").value = draft.title || "";
+  $("#youtube-publish-description").value = draft.description || "";
+  $("#youtube-publish-privacy").value = draft.visibility || "private";
+  $("#youtube-made-for-kids").checked = draft.madeForKids === true;
+  selectedContentId = draft.selectedContentId || null;
+  selectedAccountIds = new Set(draft.selectedAccountIds || []);
+  activeDetailsTab = "master";
+  $("#caption-count").textContent = String($("#publish-caption").value.length);
+  renderComposer();
 }
 
 function showUnlock() {
@@ -1115,7 +1183,14 @@ function renderPostHistory() {
   if (!locked) return;
   const loading = authenticated && (historyLoading || !historyLoaded);
   const hasError = authenticated && !loading && Boolean(historyError);
-  const hasPosts = authenticated && !loading && !hasError && postHistory.length > 0;
+  const draft = readLocalDraft();
+  const filteredPosts = historyFilter === "published"
+    ? postHistory.filter((post) => (post.status || "published") === "published")
+    : historyFilter === "failed"
+      ? postHistory.filter((post) => ["failed", "expired", "unknown"].includes(post.status))
+      : historyFilter === "drafts" ? [] : postHistory;
+  const hasVisiblePosts = historyFilter === "drafts" ? Boolean(draft) : filteredPosts.length > 0 || (historyFilter === "all" && Boolean(draft));
+  const hasPosts = authenticated && !loading && !hasError && hasVisiblePosts;
   locked.hidden = authenticated;
   $("#history-loading").hidden = !loading;
   const error = $("#history-error");
@@ -1132,6 +1207,21 @@ function renderPostHistory() {
     error.append(message, refresh);
   }
   $("#history-empty").hidden = !authenticated || loading || hasError || hasPosts;
+  const emptyTitle = $("#history-empty h3");
+  const emptyCopy = $("#history-empty p");
+  if (historyFilter === "drafts") {
+    emptyTitle.textContent = "No saved drafts";
+    emptyCopy.textContent = "Save a draft from Create a post to keep it here.";
+  } else if (historyFilter === "failed") {
+    emptyTitle.textContent = "No failed posts";
+    emptyCopy.textContent = "Failed posts will appear here.";
+  } else if (historyFilter === "published") {
+    emptyTitle.textContent = "Nothing published yet";
+    emptyCopy.textContent = "Published posts will appear here.";
+  } else {
+    emptyTitle.textContent = "Nothing here yet";
+    emptyCopy.textContent = "Posts and saved drafts will appear here.";
+  }
   const list = $("#history-list");
   list.replaceChildren();
   list.hidden = !hasPosts;
@@ -1145,7 +1235,42 @@ function renderPostHistory() {
       : "—";
   }
   renderOverviewPosts();
-  for (const post of postHistory) {
+  if ((historyFilter === "drafts" || historyFilter === "all") && draft) {
+    const row = document.createElement("article");
+    row.className = "history-row history-draft-row";
+    row.setAttribute("role", "listitem");
+    const preview = document.createElement("div");
+    preview.className = "history-preview";
+    preview.append(icon("media"));
+    const copy = document.createElement("div");
+    copy.className = "history-copy";
+    const title = document.createElement("h2");
+    title.textContent = draft.title || draft.caption || "Untitled draft";
+    const platform = document.createElement("div");
+    platform.className = "history-platform";
+    const label = document.createElement("span");
+    label.textContent = "Saved in this browser";
+    platform.append(label);
+    copy.append(title, platform);
+    const meta = document.createElement("div");
+    meta.className = "history-meta";
+    const status = document.createElement("span");
+    status.className = "history-status ready";
+    status.textContent = "Draft";
+    const date = document.createElement("time");
+    date.textContent = new Date(draft.savedAt || Date.now()).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    meta.append(status, date);
+    row.append(preview, copy, meta);
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    row.setAttribute("aria-label", "Edit saved draft");
+    row.addEventListener("click", () => { restoreLocalDraft(draft); setPage("publish"); });
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); restoreLocalDraft(draft); setPage("publish"); }
+    });
+    list.append(row);
+  }
+  for (const post of filteredPosts) {
     const row = document.createElement("article");
     row.className = "history-row";
     row.setAttribute("role", "listitem");
@@ -1316,8 +1441,32 @@ document.querySelectorAll("[data-details-tab]").forEach((tab) => {
     renderComposerPreview();
   });
 });
+document.querySelectorAll("[data-preview-platform]").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    activePreviewPlatform = tab.dataset.previewPlatform;
+    renderComposerPreview();
+  });
+});
+document.querySelectorAll("[data-history-filter]").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    historyFilter = tab.dataset.historyFilter;
+    document.querySelectorAll("[data-history-filter]").forEach((item) => {
+      const active = item === tab;
+      item.classList.toggle("active", active);
+      item.setAttribute("aria-selected", String(active));
+    });
+    renderPostHistory();
+  });
+});
+$("#open-media-picker").addEventListener("click", () => {
+  if (!authenticated) { showUnlock(); return; }
+  renderComposerMedia();
+  $("#media-picker-dialog").showModal();
+});
+$("#save-draft").addEventListener("click", saveLocalDraft);
 $("#composer-media-action").addEventListener("click", () => {
   if (!authenticated) { showUnlock(); return; }
+  if ($("#media-picker-dialog").open) $("#media-picker-dialog").close();
   setPage("content");
 });
 function openContentUpload() {
@@ -1329,10 +1478,54 @@ function openContentUpload() {
   $("#content-upload-status").textContent = "";
   $("#upload-dialog").showModal();
 }
+
+async function uploadDroppedFile(file) {
+  if (!authenticated) { showUnlock(); return; }
+  if (!contentStorageConfigured) {
+    notice("Media storage needs setup before uploads can be saved.", true);
+    return;
+  }
+  if (!file) return;
+  const form = new FormData();
+  form.append("file", file);
+  notice(`Adding ${file.name} to the media library…`);
+  try {
+    const item = await api("/content", { method: "POST", body: form });
+    await loadContent();
+    if (activePage === "publish") {
+      selectedContentId = item.id;
+      renderComposer();
+    }
+    notice("Media added to your library.");
+  } catch (error) { notice(error.message, true); }
+}
+
+let dragDepth = 0;
+document.addEventListener("dragenter", (event) => {
+  if (!event.dataTransfer?.types.includes("Files")) return;
+  event.preventDefault();
+  dragDepth += 1;
+  $("#global-drop-overlay").hidden = false;
+});
+document.addEventListener("dragover", (event) => {
+  if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+});
+document.addEventListener("dragleave", (event) => {
+  if (!event.dataTransfer?.types.includes("Files")) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (!dragDepth) $("#global-drop-overlay").hidden = true;
+});
+document.addEventListener("drop", (event) => {
+  if (!event.dataTransfer?.files.length) return;
+  event.preventDefault();
+  dragDepth = 0;
+  $("#global-drop-overlay").hidden = true;
+  void uploadDroppedFile(event.dataTransfer.files[0]);
+});
 $("#content-upload-trigger").addEventListener("click", openContentUpload);
 document.querySelectorAll("[data-details-tab]").forEach((tab) => {
   tab.addEventListener("keydown", (event) => {
-    const tabs = [...document.querySelectorAll("[data-details-tab]")];
+    const tabs = [...document.querySelectorAll("[data-details-tab]")].filter((item) => !item.hidden);
     const current = tabs.indexOf(tab);
     const next = event.key === "ArrowRight" ? (current + 1) % tabs.length
       : event.key === "ArrowLeft" ? (current - 1 + tabs.length) % tabs.length
@@ -1523,13 +1716,15 @@ $("#reload-content").addEventListener("click", async () => {
 
 $("#publish-caption").addEventListener("input", (event) => {
   $("#caption-count").textContent = String(event.target.value.length);
+  if (activeDetailsTab !== "youtube") renderComposerDetails();
   renderComposerPreview();
 });
 $("#youtube-publish-title").addEventListener("input", () => {
   syncPublishButtons();
+  if (activeDetailsTab === "youtube") renderComposerDetails();
   renderComposerPreview();
 });
-$("#youtube-publish-description").addEventListener("input", syncPublishButtons);
+$("#youtube-publish-description").addEventListener("input", () => { syncPublishButtons(); renderComposerPreview(); });
 $("#youtube-publish-privacy").addEventListener("change", syncPublishButtons);
 $("#youtube-made-for-kids").addEventListener("change", syncPublishButtons);
 
@@ -1717,7 +1912,7 @@ $("#publish-form").addEventListener("submit", async (event) => {
     const form = new FormData();
     form.append("account_id", account.id);
     form.append("title", $("#youtube-publish-title").value.trim());
-    form.append("description", $("#youtube-publish-description").value);
+    form.append("description", $("#youtube-publish-description").value || $("#publish-caption").value);
     form.append("privacy_status", $("#youtube-publish-privacy").value);
     form.append("made_for_kids", String($("#youtube-made-for-kids").checked));
     form.append("content_id", item.id);
@@ -1735,6 +1930,11 @@ $("#publish-form").addEventListener("submit", async (event) => {
   if (youtubeUploadResults.some((result) => result.url)) await loadPostHistory();
   const successful = activeInstagramPosts.filter((post) => post.id).length + youtubeUploadResults.filter((result) => result.url).length;
   const failures = activeInstagramPosts.filter((post) => post.status === "failed").length + youtubeUploadResults.filter((result) => result.error).length;
+  if (successful) {
+    try { localStorage.removeItem(localDraftKey()); } catch { /* The published post is already recorded. */ }
+    $("#draft-status").textContent = "";
+    if (historyLoaded) renderPostHistory();
+  }
   if (failures) setComposerProgress("Some destinations need attention", `${successful} of ${selected.length} destinations accepted the post. Review the status for each destination below.`);
   else if (instagramAccounts.length) setComposerProgress("Instagram is checking your media", "Not published yet. This area refreshes automatically about once a minute; when ready, choose Publish ready posts.");
   else setComposerProgress("YouTube upload complete", "Your upload is complete. Open the video below to view it.");
@@ -1746,8 +1946,7 @@ $("#publish-new-post").addEventListener("click", () => {
   instagramStatusTimer = null;
   selectedContentId = null;
   selectedAccountIds.clear();
-  showMediaPicker = false;
-  activeDetailsTab = "instagram";
+  activeDetailsTab = "master";
   activeInstagramPosts = [];
   youtubeUploadResults = [];
   $("#publish-caption").value = "";
@@ -1758,7 +1957,7 @@ $("#publish-new-post").addEventListener("click", () => {
   $("#youtube-made-for-kids").checked = false;
   renderPublishResults();
   renderComposer();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  $("#main-content").scrollTop = 0;
 });
 
 function scheduleInstagramStatusCheck() {
@@ -1849,10 +2048,22 @@ $("#instagram-publish-ready").addEventListener("click", async () => {
 });
 $("#palette-button").addEventListener("click", () => openPalette());
 $("#palette-trigger").addEventListener("click", () => openPalette());
+document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+  const currentTheme = document.documentElement.dataset.theme || "dark";
+  button.querySelector("use").setAttribute("href", currentTheme === "light" ? "#i-sun" : "#i-moon");
+  button.setAttribute("aria-label", `Switch to ${currentTheme === "light" ? "dark" : "light"} theme`);
+  button.addEventListener("click", () => {
+    const theme = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem("relay-theme", theme); } catch { /* Theme remains active for this page. */ }
+    button.querySelector("use").setAttribute("href", theme === "light" ? "#i-sun" : "#i-moon");
+    button.setAttribute("aria-label", `Switch to ${theme === "light" ? "dark" : "light"} theme`);
+  });
+});
 
 /* ── Command palette ───────────────────────────────────────── */
 const paletteCommands = [
-  { label: "Home", hint: "Overview", icon: "home", group: "Go to", run: () => setPage("overview") },
+  { label: "Overview", hint: "Workspace activity", icon: "home", group: "Go to", run: () => setPage("overview") },
   { label: "Create a post", hint: "Compose", icon: "plus", group: "Go to", run: () => setPage("publish") },
   { label: "Media library", hint: "Upload and reuse", icon: "media", group: "Go to", run: () => setPage("content") },
   { label: "Channels", hint: "Connect accounts", icon: "link", group: "Go to", run: () => setPage("connections") },

@@ -9,7 +9,7 @@
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="stylesheet" href="/static/account.css">
-  <script>document.documentElement.dataset.theme = "dark";</script>
+  <script>try { document.documentElement.dataset.theme = localStorage.getItem("relay-theme") || "dark"; } catch { document.documentElement.dataset.theme = "dark"; }</script>
   <script src="/static/app.js" type="module"></script>
 </head>
 <body>
@@ -52,12 +52,13 @@
         <span class="brand-name">relay<span>.</span></span>
       </a>
 
+      <a class="button button-secondary rail-create" href="#publish" data-nav="publish">
+        <svg class="icon"><use href="#i-plus"/></svg><span>Create post</span>
+      </a>
+
       <nav class="rail-nav" aria-label="Workspace">
         <a class="nav-item" href="#overview" data-nav="overview" aria-current="page">
-          <svg class="icon"><use href="#i-home"/></svg><span>Home</span>
-        </a>
-        <a class="nav-item nav-accent" href="#publish" data-nav="publish">
-          <svg class="icon"><use href="#i-plus"/></svg><span>Create post</span>
+          <svg class="icon"><use href="#i-home"/></svg><span>Overview</span>
         </a>
         <a class="nav-item" href="#content" data-nav="content">
           <svg class="icon"><use href="#i-media"/></svg><span>Media</span>
@@ -78,14 +79,13 @@
       </nav>
 
       <div class="rail-footer">
-        <button class="rail-action" id="palette-trigger" type="button" aria-label="Open command menu">
-          <svg class="icon"><use href="#i-search"/></svg>
-          <span>Commands</span>
-          <kbd>⌘K</kbd>
+        <button class="rail-action" type="button" data-theme-toggle aria-label="Toggle theme">
+          <svg class="icon"><use href="#i-moon"/></svg><span>Theme</span>
         </button>
-        <button class="rail-action" data-setup type="button">
-          <svg class="icon"><use href="#i-book"/></svg>
-          <span>Setup guide</span>
+        <button class="rail-action" id="palette-trigger" type="button" aria-label="Open command menu">
+          <svg class="icon"><use href="#i-zap"/></svg>
+          <span>Command menu</span>
+          <kbd>⌘K</kbd>
         </button>
       </div>
     </aside>
@@ -98,36 +98,32 @@
             <select id="workspace-select" aria-label="Active workspace"></select>
             <button id="new-workspace" type="button" aria-label="Create a workspace">+ New</button>
           </div>
-          <strong id="breadcrumb-label">Home</strong>
+          <span>Workspace</span><span class="breadcrumb-separator">/</span><strong id="breadcrumb-label">Overview</strong>
         </div>
         <div class="topbar-actions">
-          <span class="account-label" id="account-label"></span>
+          <span class="visually-hidden" id="account-label"></span>
           <button class="icon-button" id="palette-button" type="button" aria-label="Search and commands">
             <svg class="icon"><use href="#i-search"/></svg>
           </button>
-          <button class="button button-ghost session-button" id="session-button" type="button">
-            <svg class="icon"><use href="#i-lock"/></svg><span>Log in</span>
+          <button class="icon-button mobile-theme-toggle" type="button" data-theme-toggle aria-label="Toggle theme">
+            <svg class="icon"><use href="#i-moon"/></svg>
           </button>
-          <button class="icon-button" data-setup type="button" aria-label="Open setup guide">
-            <svg class="icon"><use href="#i-book"/></svg>
+          <button class="icon-button session-button" id="session-button" type="button" aria-label="Lock workspace" title="Lock workspace">
+            <svg class="icon"><use href="#i-lock"/></svg><span class="visually-hidden">Lock workspace</span>
           </button>
         </div>
       </header>
 
       <main id="main-content">
         <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+        <div id="global-drop-overlay" class="global-drop-overlay" hidden><span><svg class="icon"><use href="#i-upload"/></svg>Drop to add media</span></div>
 
         <!-- ── Home ─────────────────────────────────────────────── -->
         <section class="page-view" id="overview-view" data-page-view="overview">
           <div class="page-intro">
-            <div>
-              <h1>Overview</h1>
-              <p id="overview-readiness-detail">Unlock to see your channels and media.</p>
-            </div>
+            <div><h1>Overview</h1><p id="overview-readiness-detail">Your workspace at a glance.</p></div>
             <div class="intro-actions">
-              <button class="button button-primary" id="overview-primary-action" type="button">
-                <svg class="icon"><use href="#i-lock"/></svg><span>Log in</span>
-              </button>
+              <button class="button button-primary" id="overview-primary-action" type="button"><svg class="icon"><use href="#i-plus"/></svg><span>Create post</span></button>
             </div>
           </div>
 
@@ -155,6 +151,14 @@
 
           <div class="home-grid">
             <div class="home-main">
+              <section class="card" aria-labelledby="overview-posts-title">
+                <div class="card-head">
+                  <div><h2 id="overview-posts-title">Recent posts</h2><p>Latest publishing activity.</p></div>
+                  <button class="icon-button icon-button-sm" type="button" data-nav="history" aria-label="Open post history"><svg class="icon"><use href="#i-arrow"/></svg></button>
+                </div>
+                <div id="overview-posts" class="mini-posts"></div>
+              </section>
+
               <section class="card" id="workflow-card" aria-labelledby="workflow-title">
                 <div class="card-head">
                   <div>
@@ -182,26 +186,6 @@
                 </ol>
               </section>
 
-              <section class="card" aria-labelledby="overview-library-heading">
-                <div class="card-head">
-                  <div>
-                    <h2 id="overview-library-heading">Recent media</h2>
-                    <p>Everything you upload lands here, ready to reuse.</p>
-                  </div>
-                  <button class="button button-quiet button-sm" type="button" data-nav="content">
-                    Open library <svg class="icon"><use href="#i-arrow"/></svg>
-                  </button>
-                </div>
-                <div id="overview-media-empty" class="empty-inline">
-                  <span class="empty-inline-icon"><svg class="icon"><use href="#i-media"/></svg></span>
-                  <div>
-                    <strong id="overview-media-empty-title">Your media has a home here.</strong>
-                    <p id="overview-media-empty-description">Upload a photo or video and it’ll be ready whenever you create a post.</p>
-                  </div>
-                  <button class="button button-ghost button-sm" type="button" data-nav="content">Upload media</button>
-                </div>
-                <div id="overview-media-list" class="media-grid media-grid-compact" hidden></div>
-              </section>
             </div>
 
             <div class="home-side">
@@ -218,17 +202,22 @@
                 <div id="overview-channel-list" class="channel-list"></div>
               </section>
 
-              <section class="card" aria-labelledby="overview-posts-title">
+              <section class="card" aria-labelledby="overview-library-heading">
                 <div class="card-head">
                   <div>
-                    <h2 id="overview-posts-title">Recent posts</h2>
-                    <p>What you sent last.</p>
+                    <h2 id="overview-library-heading">Recent media</h2>
+                    <p>Latest uploads.</p>
                   </div>
-                  <button class="icon-button icon-button-sm" type="button" data-nav="history" aria-label="Open post history">
+                  <button class="icon-button icon-button-sm" type="button" data-nav="content" aria-label="Open media library">
                     <svg class="icon"><use href="#i-arrow"/></svg>
                   </button>
                 </div>
-                <div id="overview-posts" class="mini-posts"></div>
+                <div id="overview-media-empty" class="empty-inline">
+                  <span class="empty-inline-icon"><svg class="icon"><use href="#i-media"/></svg></span>
+                  <div><strong id="overview-media-empty-title">No recent media.</strong><p id="overview-media-empty-description">Upload a photo or video to see it here.</p></div>
+                  <button class="button button-ghost button-sm" type="button" data-nav="content">Open library</button>
+                </div>
+                <div id="overview-media-list" class="media-grid media-grid-compact" hidden></div>
               </section>
 
             </div>
@@ -237,127 +226,112 @@
 
         <!-- ── Create ───────────────────────────────────────────── -->
         <section class="page-view" id="publish-view" data-page-view="publish" hidden>
-          <div class="page-intro">
-            <div>
-              <h1>Create a post</h1>
-              <p>Pick media, choose channels, review. Nothing goes live until you send it.</p>
-            </div>
-          </div>
+          <div class="page-intro composer-page-heading"><div><h1>Create a post</h1></div></div>
 
           <form id="publish-form" class="composer-form">
+            <section class="composer-channel-strip" aria-labelledby="composer-destinations-title">
+              <div class="composer-strip-label"><h2 id="composer-destinations-title">Channels</h2><span id="selected-account-count">0 selected</span></div>
+              <div id="composer-destinations" class="profile-pills" role="group" aria-label="Publishing channels"></div>
+              <p id="composer-channel-hint" class="composer-hint">Choose at least one account.</p>
+            </section>
+
             <div class="composer" id="composer-workspace">
               <div class="composer-flow">
-                <section class="composer-section" aria-labelledby="composer-destinations-title">
-                  <div class="composer-section-head">
-                    <div><h2 id="composer-destinations-title">Channels</h2><p>Choose one or more profiles.</p></div>
-                    <span class="selection-count" id="selected-account-count">0 selected</span>
-                  </div>
-                  <div id="composer-destinations" class="profile-pills" role="group" aria-label="Publishing channels"></div>
-                  <p id="composer-channel-hint" class="composer-hint">Choose at least one account.</p>
-                </section>
-
-                <section class="composer-section" aria-labelledby="composer-media-title">
-                  <div class="composer-section-head">
-                    <div><h2 id="composer-media-title">Media</h2><p>One photo or video per post.</p></div>
-                    <button class="button button-secondary button-sm" id="publish-upload-trigger" type="button"><svg class="icon"><use href="#i-upload"/></svg> Upload media</button>
-                    <label class="visually-hidden" for="publish-file">Upload a photo or video</label>
-                    <input id="publish-file" type="file" accept="image/jpeg,video/*,application/octet-stream" hidden>
-                  </div>
-                  <p id="publish-upload-status" class="inline-status" role="status" aria-live="polite" hidden></p>
-                  <span id="publish-upload-name" class="visually-hidden">No file selected</span>
-                  <div id="composer-selected-attachment" class="selected-attachment" hidden></div>
-                  <div id="composer-media-empty" class="empty-inline">
-                    <span class="empty-inline-icon"><svg class="icon"><use href="#i-media"/></svg></span>
-                    <div><strong id="composer-media-empty-title">Log in to your account to see your media</strong><p id="composer-media-empty-copy">Your saved photos and videos will show here as visual previews.</p></div>
-                    <button class="button button-ghost button-sm" id="composer-media-action" type="button">Log in</button>
-                  </div>
-                  <div id="composer-media-grid" class="picker-grid" hidden></div>
-                  <small id="composer-media-hint" class="composer-hint">Choose one item to continue.</small>
-                </section>
-
-                <section class="composer-section post-details" aria-labelledby="composer-details-title">
-                  <div class="composer-section-head">
-                    <div><h2 id="composer-details-title">Post details</h2><p id="composer-details-hint">Write a caption or set your YouTube video details.</p></div>
-                  </div>
+                <section class="composer-section composer-editor" aria-label="Post editor">
                   <div class="details-tabs" role="tablist" aria-label="Post details platform">
-                    <button class="details-tab active" id="instagram-tab" type="button" role="tab" aria-selected="true" aria-controls="instagram-details" data-details-tab="instagram"><svg class="icon"><use href="#i-instagram"/></svg> Instagram</button>
-                    <button class="details-tab" id="youtube-tab" type="button" role="tab" aria-selected="false" aria-controls="youtube-details" data-details-tab="youtube"><svg class="icon"><use href="#i-youtube"/></svg> YouTube</button>
+                    <button class="details-tab active" id="master-tab" type="button" role="tab" aria-selected="true" aria-controls="instagram-details" data-details-tab="master">Master</button>
+                    <button class="details-tab" id="instagram-tab" type="button" role="tab" aria-selected="false" aria-controls="instagram-details" data-details-tab="instagram" hidden><svg class="icon"><use href="#i-instagram"/></svg> Instagram</button>
+                    <button class="details-tab" id="youtube-tab" type="button" role="tab" aria-selected="false" aria-controls="youtube-details" data-details-tab="youtube" hidden><svg class="icon"><use href="#i-youtube"/></svg> YouTube</button>
                   </div>
-                  <div id="instagram-details" class="platform-block" role="tabpanel" aria-labelledby="instagram-tab">
-                    <label class="visually-hidden" for="publish-caption">Instagram caption</label>
+                  <div id="instagram-details" class="platform-block" role="tabpanel" aria-labelledby="master-tab">
+                    <label class="visually-hidden" for="publish-caption">Caption</label>
                     <textarea id="publish-caption" maxlength="2200" rows="5" placeholder="Write a caption…"></textarea>
                     <small class="field-meta"><span id="caption-count">0</span> / 2,200</small>
                   </div>
                   <div id="youtube-details" class="platform-block" role="tabpanel" aria-labelledby="youtube-tab" hidden>
                     <div class="field-grid">
-                      <div class="field field-wide"><label for="youtube-publish-title">Title <span>Required · 100 max</span></label><input id="youtube-publish-title" type="text" maxlength="100" placeholder="Give your video a title"></div>
-                      <div class="field"><label for="youtube-publish-privacy">Visibility</label><select id="youtube-publish-privacy"><option value="private">Private · only you</option><option value="unlisted">Unlisted · link only</option><option value="public">Public · everyone</option></select></div>
-                      <div class="field field-wide"><label for="youtube-publish-description">Description <span>Optional · 5,000 max</span></label><textarea id="youtube-publish-description" maxlength="5000" rows="3" placeholder="Tell viewers what this video is about"></textarea></div>
-                      <label class="switch-row"><input id="youtube-made-for-kids" type="checkbox"><span><strong>Made for kids</strong><small>Required by YouTube for children’s content.</small></span></label>
+                      <div class="field field-wide"><label for="youtube-publish-title">Video title</label><input id="youtube-publish-title" type="text" maxlength="100" placeholder="Add a title"></div>
+                      <div class="field field-wide"><label for="youtube-publish-description">Description</label><textarea id="youtube-publish-description" maxlength="5000" rows="3" placeholder="Add a description"></textarea></div>
+                      <div class="youtube-options">
+                        <div class="field"><label for="youtube-publish-privacy">Visibility</label><select id="youtube-publish-privacy"><option value="private">Private</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select></div>
+                        <label class="switch-row"><input id="youtube-made-for-kids" type="checkbox"><span><strong>Made for kids</strong></span></label>
+                      </div>
                     </div>
+                  </div>
+                  <p id="publish-upload-status" class="inline-status" role="status" aria-live="polite" hidden></p>
+                  <span id="publish-upload-name" class="visually-hidden">No file selected</span>
+                  <div id="composer-selected-attachment" class="selected-attachment" hidden></div>
+                  <div class="editor-toolbar">
+                    <div class="editor-tools">
+                      <button class="button button-quiet button-sm" id="open-media-picker" type="button"><svg class="icon"><use href="#i-media"/></svg> Select from library</button>
+                      <button class="button button-quiet button-sm" id="publish-upload-trigger" type="button"><svg class="icon"><use href="#i-upload"/></svg> Upload file</button>
+                      <label class="visually-hidden" for="publish-file">Upload a photo or video</label>
+                      <input id="publish-file" type="file" accept="image/jpeg,video/*,application/octet-stream" hidden>
+                    </div>
+                    <small class="field-meta editor-counter"><span id="active-character-count">0</span> <span id="active-character-limit">characters</span></small>
                   </div>
                 </section>
 
-                <section id="publish-results-section" class="card results-section" aria-labelledby="publish-results-title" hidden>
+                <section id="publish-results-section" class="results-section" aria-labelledby="publish-results-title" hidden>
                   <div class="card-head">
-                    <div>
-                      <h2 id="publish-results-title">Delivery status</h2>
-                      <p>Each channel reports its own result.</p>
-                    </div>
+                    <div><h2 id="publish-results-title">Delivery status</h2><p>Publishing results by channel.</p></div>
                     <div class="head-actions">
                       <button class="button button-quiet button-sm" id="instagram-check-all" type="button" hidden>Check now</button>
-                      <button class="button button-primary button-sm" id="instagram-publish-ready" type="button" hidden>Publish ready</button>
+                      <button class="button button-secondary button-sm" id="instagram-publish-ready" type="button" hidden>Publish ready</button>
                       <button class="button button-ghost button-sm" id="publish-new-post" type="button">New post</button>
                     </div>
                   </div>
                   <p id="publish-status-summary" class="status-summary" role="status" aria-live="polite" hidden></p>
                   <div id="publish-results" class="results-list" aria-live="polite"></div>
                 </section>
+
+                <div class="composer-action-bar">
+                  <div><strong id="composer-action-summary">Posting to 0 channels</strong><small id="draft-status" aria-live="polite"></small></div>
+                  <div class="composer-action-buttons">
+                    <button class="button button-secondary" id="save-draft" type="button">Save draft</button>
+                    <button class="button button-primary" id="publish-submit" type="submit" disabled><span>Publish to 0 channels</span><svg class="icon"><use href="#i-arrow"/></svg></button>
+                  </div>
+                </div>
               </div>
 
-              <aside class="composer-side" aria-label="Live preview and publish">
-                <section class="card preview-card">
-                  <div class="card-head card-head-tight">
-                    <h2>Preview</h2>
-                    <span class="pill pill-quiet">Draft</span>
+              <aside class="composer-side" aria-label="Live preview">
+                <div class="preview-pane-head">
+                  <h2>Preview</h2>
+                  <div class="preview-switcher" role="tablist" aria-label="Preview platform">
+                    <button type="button" data-preview-platform="instagram" class="active" aria-selected="true">Instagram</button>
+                    <button type="button" data-preview-platform="youtube" aria-selected="false">YouTube</button>
                   </div>
-                  <div id="composer-preview-media" class="preview-media">
-                    <span><svg class="icon"><use href="#i-media"/></svg><small>Selected media<br>appears here</small></span>
+                </div>
+                <article class="social-preview-card">
+                  <header class="social-preview-account"><span id="composer-preview-account-avatar" class="profile-avatar">R</span><strong id="composer-preview-account">Select a channel</strong><svg class="icon"><use href="#i-zap"/></svg></header>
+                  <div id="composer-preview-media" class="preview-media"><span><svg class="icon"><use href="#i-media"/></svg><small>Media preview</small></span></div>
+                  <div class="social-preview-copy">
+                    <div id="composer-preview-destinations" class="preview-chips" hidden></div>
+                    <strong id="composer-preview-title" hidden></strong>
+                    <p id="composer-preview-copy">Your caption will appear here.</p>
                   </div>
-                  <div class="preview-file">
-                    <span class="preview-file-icon"><svg class="icon"><use href="#i-media"/></svg></span>
-                    <span><strong id="preview-file-name">No media selected</strong><small id="preview-file-meta">Choose media to begin</small></span>
-                  </div>
-                  <div class="preview-divider"></div>
-                  <div class="preview-row">
-                    <strong>Posting to</strong>
-                    <small id="preview-target-count">No channels selected</small>
-                  </div>
-                  <div id="composer-preview-destinations" class="preview-chips">
-                    <span class="preview-placeholder">Channels appear here</span>
-                  </div>
-                  <p id="composer-preview-copy" class="preview-copy">Your post text will appear here.</p>
-                  <button class="button button-primary button-block composer-submit" id="publish-submit" type="submit" disabled><span>Publish to 0 channels</span><svg class="icon"><use href="#i-arrow"/></svg></button>
-                </section>
+                </article>
+                <span class="visually-hidden" id="preview-file-name">No media selected</span><span class="visually-hidden" id="preview-file-meta">Choose media</span>
+                <span class="visually-hidden" id="preview-target-count">No channels selected</span>
               </aside>
             </div>
           </form>
+          <dialog id="media-picker-dialog" class="drawer" aria-labelledby="composer-media-title">
+            <div class="drawer-head"><div><h2 id="composer-media-title">Select media</h2><p id="composer-media-hint">Choose one item to attach.</p></div><button class="icon-button" type="button" data-close="media-picker-dialog" aria-label="Close media library"><svg class="icon"><use href="#i-close"/></svg></button></div>
+            <div id="composer-media-empty" class="empty-inline"><span class="empty-inline-icon"><svg class="icon"><use href="#i-media"/></svg></span><div><strong id="composer-media-empty-title">Your media will appear here.</strong><p id="composer-media-empty-copy">Choose a photo or video from the library.</p></div><button class="button button-ghost button-sm" id="composer-media-action" type="button">Open media library</button></div>
+            <div id="composer-media-grid" class="picker-grid" hidden></div>
+          </dialog>
         </section>
 
         <!-- ── Channels ─────────────────────────────────────────── -->
         <section class="page-view" id="connections-view" data-page-view="connections" hidden>
-          <div class="page-intro">
-            <div>
-              <h1>Channels</h1>
-              <p>Connect accounts and keep every destination in one place.</p>
-            </div>
-          </div>
+          <div class="page-intro"><div><h1>Channels</h1></div></div>
 
           <section class="card" aria-labelledby="accounts-heading">
             <div class="card-head">
               <div>
                 <h2 id="accounts-heading">Connected <span class="count-pill" id="account-count">—</span></h2>
-                <p>Reconnect when a token expires. Disconnecting removes it from Relay.</p>
+                <p>Your connected accounts.</p>
               </div>
               <button class="button button-quiet button-sm" id="reload-accounts" type="button">
                 <svg class="icon"><use href="#i-refresh"/></svg> Refresh
@@ -368,7 +342,7 @@
               <span class="empty-state-icon"><svg class="icon"><use href="#i-link"/></svg></span>
               <h3 id="empty-title">No channels connected yet</h3>
               <p id="empty-description">Log in to your account to view or connect an account.</p>
-              <button class="button button-primary empty-connect" id="empty-connect" type="button">Log in</button>
+              <button class="button button-secondary empty-connect" id="empty-connect" type="button">Log in</button>
             </div>
           </section>
 
@@ -397,10 +371,7 @@
         <!-- ── Media ────────────────────────────────────────────── -->
         <section class="page-view" id="content-view" data-page-view="content" hidden>
           <div class="page-intro">
-            <div>
-              <h1>Media</h1>
-              <p>Keep photos and videos here so they’re ready when you post.</p>
-            </div>
+            <div><h1>Media</h1></div>
             <div class="intro-actions">
               <button class="button button-primary" id="content-upload-trigger" type="button"><svg class="icon"><use href="#i-plus"/></svg> Upload media</button>
             </div>
@@ -470,10 +441,7 @@
         <!-- ── History ──────────────────────────────────────────── -->
         <section class="page-view" id="history-view" data-page-view="history" hidden>
           <div class="page-intro">
-            <div>
-              <h1>History</h1>
-              <p>Everything published through Relay.</p>
-            </div>
+            <div><h1>History</h1></div>
             <div class="intro-actions">
               <button class="button button-ghost" id="refresh-history" type="button">
                 <svg class="icon"><use href="#i-refresh"/></svg> Refresh
@@ -491,6 +459,12 @@
             <div><strong>Loading history…</strong><p>Gathering posts published through Relay.</p></div>
           </div>
           <div id="history-error" class="message-block message-error" role="alert" hidden></div>
+          <div class="history-filters" role="tablist" aria-label="Filter post history">
+            <button type="button" data-history-filter="all" class="active" aria-selected="true">All</button>
+            <button type="button" data-history-filter="published" aria-selected="false">Published</button>
+            <button type="button" data-history-filter="drafts" aria-selected="false">Drafts</button>
+            <button type="button" data-history-filter="failed" aria-selected="false">Failed</button>
+          </div>
           <div id="history-empty" class="empty-state" hidden>
             <span class="empty-state-icon"><svg class="icon"><use href="#i-history"/></svg></span>
             <h3>Nothing published yet</h3>
@@ -500,16 +474,13 @@
           <div id="history-list" class="history-list" role="list" hidden></div>
         </section>
 
-        <footer class="page-footer">
-          <a href="/docs" target="_blank" rel="noopener">API reference <svg class="icon"><use href="#i-external"/></svg></a>
-        </footer>
       </main>
     </div>
   </div>
 
   <nav class="mobile-nav" aria-label="Workspace">
     <a class="nav-item mobile-nav-item" href="#overview" data-nav="overview" aria-current="page">
-      <svg class="icon"><use href="#i-home"/></svg><span>Home</span>
+      <svg class="icon"><use href="#i-home"/></svg><span>Overview</span>
     </a>
     <a class="nav-item mobile-nav-item" href="#publish" data-nav="publish">
       <svg class="icon"><use href="#i-plus"/></svg><span>Create</span>
@@ -521,7 +492,7 @@
       <svg class="icon"><use href="#i-link"/></svg><span>Channels</span>
     </a>
     <a class="nav-item mobile-nav-item" href="#analytics" data-nav="analytics">
-      <svg class="icon"><use href="#i-chart"/></svg><span>Stats</span>
+      <svg class="icon"><use href="#i-chart"/></svg><span>Analytics</span>
     </a>
     <a class="nav-item mobile-nav-item" href="#history" data-nav="history">
       <svg class="icon"><use href="#i-history"/></svg><span>History</span>
