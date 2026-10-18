@@ -489,6 +489,29 @@ def test_validation_wrong_account_media_and_disconnect(settings):
         assert client.post(f"/accounts/{account['id']}/refresh", headers=HEADERS).status_code == 404
 
 
+def test_unreadable_stored_token_is_reported_per_account(settings):
+    app = create_app(settings, httpx.MockTransport(youtube_provider))
+    with TestClient(app) as client:
+        account, _ = connect(client)
+        with app.state.store.connection() as db:
+            db.execute("UPDATE accounts SET access_token='encrypted-with-another-key'")
+        # The workspace still lists its channels; only this one needs reconnecting.
+        listing = client.get("/accounts?include_avatars=true", headers=HEADERS)
+        assert listing.status_code == 200
+        assert [row["id"] for row in listing.json()["accounts"]] == [account["id"]]
+        upload = client.post(
+            "/youtube/videos",
+            headers=HEADERS,
+            data={"account_id": account["id"], "title": "Test"},
+            files={"file": ("x.mp4", b"data", "video/mp4")},
+        )
+        assert upload.status_code == 409
+        assert "Reconnect" in upload.json()["detail"]
+        assert client.get("/analytics", headers=HEADERS).json()["accounts"][0]["status"] == (
+            "unavailable"
+        )
+
+
 def test_local_health_and_openapi(settings):
     with TestClient(create_app(settings)) as client:
         assert client.get("/health").json() == {"status": "ok"}
