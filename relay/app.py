@@ -109,6 +109,7 @@ def create_app(settings: Settings | None = None, transport=None):
         "The service API key accesses only the legacy workspace.",
     )
     app.state.store = store
+    app.state.refresh_locks = refresh_locks
     frontend = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=frontend), name="static")
     session_cookie = "relay_session"
@@ -525,6 +526,8 @@ def create_app(settings: Settings | None = None, transport=None):
         """Remove local tokens and Instagram job records. Does not revoke provider consent."""
         if not store.delete_account(account_id):
             raise HTTPException(404, "Connected account not found.")
+        # The account id is never reused, so its lock has no further use.
+        refresh_locks.pop(account_id, None)
         return Response(status_code=204)
 
     async def save_content_file(file: UploadFile):

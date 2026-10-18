@@ -489,6 +489,16 @@ def test_validation_wrong_account_media_and_disconnect(settings):
         assert client.post(f"/accounts/{account['id']}/refresh", headers=HEADERS).status_code == 404
 
 
+def test_disconnect_drops_the_refresh_lock(settings):
+    app = create_app(settings, httpx.MockTransport(youtube_provider))
+    with TestClient(app) as client:
+        account, _ = connect(client)
+        assert client.post(f"/accounts/{account['id']}/refresh", headers=HEADERS).status_code == 200
+        assert account["id"] in app.state.refresh_locks
+        assert client.delete(f"/accounts/{account['id']}", headers=HEADERS).status_code == 204
+        assert account["id"] not in app.state.refresh_locks
+
+
 def test_local_health_and_openapi(settings):
     with TestClient(create_app(settings)) as client:
         assert client.get("/health").json() == {"status": "ok"}
