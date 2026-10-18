@@ -46,12 +46,10 @@ function renderComposerMedia() {
   grid.replaceChildren();
   attachment.replaceChildren();
   const emptyTitle = $("#composer-media-empty-title");
-  const emptyCopy = $("#composer-media-empty-copy");
   const emptyAction = $("#composer-media-action");
   const item = contentItems.find((content) => content.id === selectedContentId);
   if (!authenticated) {
     emptyTitle.textContent = "Unlock your workspace to see your media";
-    emptyCopy.textContent = "Your saved photos and videos will show here as visual previews.";
     emptyAction.textContent = "Unlock workspace";
     empty.hidden = false;
     attachment.hidden = true;
@@ -60,8 +58,8 @@ function renderComposerMedia() {
   }
   if (!contentStorageConfigured) {
     emptyTitle.textContent = "Media storage needs setup";
-    emptyCopy.textContent = "Media storage needs a one-time setup before uploads can be saved.";
-    emptyAction.hidden = true;
+    emptyAction.hidden = false;
+    emptyAction.textContent = "View media setup";
     empty.hidden = false;
     attachment.hidden = true;
     grid.hidden = true;
@@ -87,8 +85,18 @@ function renderComposerMedia() {
     remove.setAttribute("aria-label", "Remove attached media");
     remove.textContent = "×";
     remove.addEventListener("click", () => {
+      const previousContentId = selectedContentId;
       selectedContentId = null;
       renderComposer();
+      scheduleDraftSave();
+      notice("Media removed from this post.", false, {
+        label: "Undo",
+        run() {
+          selectedContentId = previousContentId;
+          renderComposer();
+          scheduleDraftSave();
+        },
+      });
     });
     attachment.append(preview, remove);
     attachment.hidden = false;
@@ -98,7 +106,6 @@ function renderComposerMedia() {
     attachment.hidden = true;
     if (!contentItems.length) {
       emptyTitle.textContent = "Your library is ready for a first upload";
-      emptyCopy.textContent = "Upload a photo or video above. It will appear here as a preview.";
       empty.hidden = false;
       grid.hidden = true;
       return;
@@ -155,6 +162,8 @@ function selectComposerMedia(item) {
   if (publishing) return;
   const picker = $("#media-picker-dialog");
   if (picker.open) picker.close();
+  const previousContentId = selectedContentId;
+  const previousAccountIds = new Set(selectedAccountIds);
   if (selectedContentId === item.id) {
     selectedContentId = null;
   } else {
@@ -163,10 +172,19 @@ function selectComposerMedia(item) {
     selectedContentId = item.id;
     if (blocked.length) {
       const providers = [...new Set(blocked.map((account) => names[account.provider]))].join(" and ");
-      notice(`Media changed. ${providers} ${blocked.length === 1 ? "selection was" : "selections were"} removed because this ${mediaKind(item).toLowerCase()} can't be sent there.`);
+      notice(`This ${mediaKind(item).toLowerCase()} can’t go to ${providers}.`, false, {
+        label: "Undo",
+        run() {
+          selectedContentId = previousContentId;
+          selectedAccountIds = new Set(previousAccountIds);
+          renderComposer();
+          scheduleDraftSave();
+        },
+      });
     }
   }
   renderComposer();
+  scheduleDraftSave();
 }
 
 function renderComposerDestinations() {
@@ -188,6 +206,7 @@ function renderComposerDestinations() {
       if (checkbox.checked) selectedAccountIds.add(account.id);
       else selectedAccountIds.delete(account.id);
       renderComposer();
+      scheduleDraftSave();
     });
     const name = document.createElement("span");
     name.className = "profile-pill-name";
@@ -198,8 +217,13 @@ function renderComposerDestinations() {
   if (!accountList.length) {
     const empty = document.createElement("span");
     empty.className = "profile-pills-empty";
-    empty.textContent = authenticated ? "No channels connected yet." : "Unlock your workspace to see connected channels.";
-    container.append(empty);
+    empty.textContent = authenticated ? "No channels connected" : "Unlock your workspace";
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "button button-quiet button-sm";
+    action.textContent = authenticated ? "Connect a channel" : "Unlock workspace";
+    action.addEventListener("click", () => authenticated ? setPage("connections") : showUnlock());
+    container.append(empty, action);
   }
   const selected = accountList.filter((account) => selectedAccountIds.has(account.id));
   $("#selected-account-count").textContent = selected.length + " selected";
@@ -307,24 +331,10 @@ function renderComposer() {
   if (selectedContentId && !contentItems.some((item) => item.id === selectedContentId)) selectedContentId = null;
   renderComposerMedia();
   renderComposerDestinations();
-  renderComposerWorkflow();
   renderComposerDetails();
   renderComposerPreview();
   syncPublishButtons();
   $("#active-character-count").textContent = String(activeDetailsTab === "youtube" ? $("#youtube-publish-title").value.length : $("#publish-caption").value.length);
-}
-
-function renderComposerWorkflow() {
-  const item = contentItems.find((content) => content.id === selectedContentId);
-  const selected = accountList.filter((account) => selectedAccountIds.has(account.id));
-  $("#composer-media-hint").textContent = item
-    ? mediaKind(item) + " selected."
-    : !authenticated ? "Unlock your workspace to choose saved media."
-      : !contentStorageConfigured ? "Media storage needs setup before uploads can be saved."
-        : "Choose one item from your library.";
-  $("#composer-channel-hint").textContent = selected.length
-    ? selected.length + " " + (selected.length === 1 ? "channel" : "channels") + " selected."
-    : "Choose at least one account.";
 }
 
 function syncPublishButtons() {

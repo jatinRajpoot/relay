@@ -121,7 +121,7 @@ async function lockWorkspace() {
     authenticated = false;
     renderSession();
     window.location.replace("/");
-  } catch (error) { notice(error.message, true); }
+  } catch (error) { notice(error.message, true, { label: "Retry now", run: () => lockWorkspace() }); }
 }
 
 function isTyping(event) {
