@@ -1,0 +1,80 @@
+/* ============================================================
+   Relay — studio UI
+   1. Tokens         5. Cards & content
+   2. Base           6. Composer
+   3. Rail & topbar  7. Channels / media / analytics / history
+   4. Page furniture 8. Dialogs, palette, toasts
+   ============================================================ */
+
+/* ── 1. Tokens ─────────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+
+  --bg: #09090b;
+  --bg-soft: #09090b;
+  --surface: #111113;
+  --surface-2: #18181b;
+  --surface-3: #27272a;
+  --line: rgba(39, 39, 42, 0.8);
+  --line-strong: #3f3f46;
+
+  --text: #fafafa;
+  --text-2: #e4e4e7;
+  --muted: #a1a1aa;
+  --faint: #71717a;
+
+  --accent: #c8f560;
+  --accent-ink: #09090b;
+  --accent-soft: rgba(200, 245, 96, 0.08);
+  --accent-line: rgba(200, 245, 96, 0.28);
+
+  --success: #c8f560;
+  --success-soft: transparent;
+  --warn: #f0c05a;
+  --warn-soft: rgba(240, 192, 90, 0.13);
+  --danger: #ff8072;
+  --danger-soft: rgba(255, 128, 114, 0.12);
+
+  --radius: 14px;
+  --radius-sm: 9px;
+  --radius-lg: 20px;
+
+  --shadow: none;
+  --shadow-pop: 0 24px 70px -24px rgba(0, 0, 0, 0.75);
+
+  --rail: 232px;
+  --topbar: 56px;
+  --maxw: 1180px;
+
+  --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+[data-theme="light"] {
+  color-scheme: dark;
+  --bg: #09090b;
+  --bg-soft: #09090b;
+  --surface: #111113;
+  --surface-2: #18181b;
+  --surface-3: #27272a;
+  --line: rgba(39, 39, 42, 0.8);
+  --line-strong: #3f3f46;
+  --text: #fafafa;
+  --text-2: #e4e4e7;
+  --muted: #a1a1aa;
+  --faint: #71717a;
+  --accent: #c8f560;
+  --accent-ink: #09090b;
+  --accent-soft: rgba(200, 245, 96, 0.08);
+  --accent-line: rgba(200, 245, 96, 0.28);
+  --success: #c8f560;
+  --success-soft: transparent;
+  --warn: #f0c05a;
+  --warn-soft: rgba(240, 192, 90, 0.13);
+  --danger: #ff8072;
+  --danger-soft: rgba(255, 128, 114, 0.12);
+  --shadow: none;
+  --shadow-pop: 0 24px 70px -24px rgba(0, 0, 0, 0.75);
+}
