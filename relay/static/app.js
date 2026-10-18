@@ -80,28 +80,62 @@ async function api(path, options = {}) {
   return data;
 }
 
+function icon(name) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "icon");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `#i-${name}`);
+  svg.append(use);
+  return svg;
+}
+
+function dismissToast(toast) {
+  if (toast.dataset.leaving) return;
+  toast.dataset.leaving = "true";
+  toast.classList.add("leaving");
+  window.setTimeout(() => toast.remove(), 200);
+}
+
 function notice(message, error = false, action = null) {
-  const box = $("#notice");
-  box.replaceChildren();
+  const stack = $("#toasts");
+  if (!stack) return;
+  const toast = document.createElement("div");
+  toast.className = `toast${error ? " error" : ""}`;
+  toast.append(icon(error ? "alert" : "check"));
+  toast.querySelector(".icon").classList.add("toast-icon");
   const text = document.createElement("span");
+  text.className = "toast-text";
   text.textContent = message;
-  const dismiss = document.createElement("button");
-  dismiss.className = action ? "text-button" : "icon-button";
-  dismiss.setAttribute("aria-label", action ? action.label : "Dismiss notification");
-  dismiss.textContent = action ? action.label : "×";
-  dismiss.addEventListener("click", () => {
-    if (action) action.run();
-    else box.hidden = true;
-  });
-  box.append(text, dismiss);
-  box.classList.toggle("error", error);
-  box.hidden = false;
+  toast.append(text);
+  if (action) {
+    const run = document.createElement("button");
+    run.type = "button";
+    run.className = "toast-action";
+    run.textContent = action.label;
+    run.addEventListener("click", () => {
+      action.run();
+      dismissToast(toast);
+    });
+    toast.append(run);
+  }
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "toast-close";
+  close.setAttribute("aria-label", "Dismiss notification");
+  close.textContent = "×";
+  close.addEventListener("click", () => dismissToast(toast));
+  toast.append(close);
+  stack.append(toast);
+  while (stack.children.length > 3) stack.firstElementChild.remove();
+  const timer = window.setTimeout(() => dismissToast(toast), error ? 9000 : 5500);
+  toast.addEventListener("mouseenter", () => window.clearTimeout(timer), { once: true });
 }
 
 function renderSession() {
   const button = $("#session-button");
   button.classList.toggle("unlocked", authenticated);
   button.querySelector("span").textContent = authenticated ? "Lock workspace" : "Unlock workspace";
+  button.querySelector("use").setAttribute("href", authenticated ? "#i-unlock" : "#i-lock");
   $("#empty-foot").hidden = authenticated;
   $("#empty-connect").textContent = authenticated ? "Connect a channel" : "Unlock workspace";
   $("#empty-description").textContent = authenticated
@@ -184,6 +218,14 @@ function renderOverview() {
   if (!primaryAction) return;
   primaryAction.querySelector("span").textContent = authenticated ? "Create a post" : "Unlock workspace";
   primaryAction.querySelector("use").setAttribute("href", authenticated ? "#i-plus" : "#i-lock");
+  $("#overview-channel-count").textContent = authenticated ? String(accountList.length) : "—";
+  $("#overview-media-count").textContent = authenticated ? String(contentItems.length) : "—";
+  const publishedCount = $("#overview-history-count");
+  if (publishedCount) {
+    publishedCount.textContent = authenticated && historyLoaded && !historyError
+      ? String(postHistory.length)
+      : "—";
+  }
   let readiness = "Your workspace awaits";
   let readinessDetail = "Unlock once to see your channels and media";
   if (authenticated && !accountList.length) {
@@ -482,10 +524,6 @@ function setPage(page, { recordHistory = true } = {}) {
   window.scrollTo({ top: 0, behavior: "smooth" });
   if (page === "analytics") void loadAnalytics();
   if (page === "history") void loadPostHistory();
-  $("#nav-more-menu").hidden = true;
-  $("#nav-more").setAttribute("aria-expanded", "false");
-  const moreActive = page === "analytics" || page === "history";
-  $("#nav-more").classList.toggle("active", moreActive);
 }
 
 function profileInitials(name) {
@@ -799,7 +837,8 @@ function renderComposerWorkflow() {
   const workspace = $("#composer-workspace");
   workspace.dataset.activeStep = composerStep;
   document.querySelectorAll("[data-composer-panel]").forEach((panel) => {
-    panel.hidden = panel.dataset.composerPanel !== composerStep;
+    panel.hidden = false;
+    panel.classList.toggle("is-active", panel.dataset.composerPanel === composerStep);
   });
   document.querySelectorAll("[data-compose-nav]").forEach((step) => {
     const current = step.dataset.composeNav === composerStep;
@@ -817,7 +856,7 @@ function renderComposerWorkflow() {
   $("#back-to-channels").disabled = publishing;
   $("#continue-to-channels").disabled = !mediaReady || publishing;
   $("#continue-to-details").disabled = !channelsReady || publishing;
-  $("#publish-dock").hidden = composerStep !== "details";
+  $("#publish-dock").hidden = false;
 
   const selected = accountList.filter((account) => selectedAccountIds.has(account.id));
   const item = contentItems.find((content) => content.id === selectedContentId);
@@ -869,7 +908,9 @@ function syncPublishButtons() {
     ? `Send to ${selected.length} channels`
     : hasInstagram
       ? "Prepare Instagram post"
-      : "Upload to YouTube" + (selected.length > 1 ? ` · ${selected.length} channels` : "");
+      : hasYoutube
+        ? "Upload to YouTube" + (selected.length > 1 ? ` · ${selected.length} channels` : "")
+        : "Prepare post";
   $("#publish-submit").querySelector("span").textContent = submitLabel;
   $("#session-button").disabled = publishing;
   $("#content-file").disabled = !authenticated || !contentStorageConfigured || publishing;
@@ -991,6 +1032,7 @@ function makeMediaTag(label, platform) {
 
 function formatBytes(bytes) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
@@ -1068,6 +1110,43 @@ async function loadContent() {
   renderWorkspaceFlow();
 }
 
+function renderOverviewPosts() {
+  const container = $("#overview-posts");
+  if (!container) return;
+  container.replaceChildren();
+  const note = (text) => {
+    const paragraph = document.createElement("p");
+    paragraph.className = "mini-empty";
+    paragraph.textContent = text;
+    return paragraph;
+  };
+  if (!authenticated) { container.append(note("Unlock to see your publishing activity.")); return; }
+  if (historyError) { container.append(note(historyError)); return; }
+  if (!historyLoaded || historyLoading) { container.append(note("Loading recent activity…")); return; }
+  if (!postHistory.length) { container.append(note("Nothing published yet.")); return; }
+  for (const post of postHistory.slice(0, 3)) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "mini-post";
+    const badge = document.createElement("span");
+    badge.className = `mini-post-dot ${post.provider}`;
+    badge.append(icon(post.provider === "youtube" ? "youtube" : "instagram"));
+    const copy = document.createElement("span");
+    copy.className = "mini-post-copy";
+    const title = document.createElement("strong");
+    title.textContent = post.title || post.caption || post.media_name ||
+      (post.provider === "youtube" ? "YouTube video" : "Instagram post");
+    const meta = document.createElement("small");
+    const when = new Date(Number(post.published_at) * 1000)
+      .toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    meta.textContent = `${names[post.provider]} · ${when}`;
+    copy.append(title, meta);
+    row.append(badge, copy);
+    row.addEventListener("click", () => setPage("history"));
+    container.append(row);
+  }
+}
+
 function renderPostHistory() {
   const locked = $("#history-locked");
   if (!locked) return;
@@ -1096,6 +1175,13 @@ function renderPostHistory() {
   $("#history-nav-count").textContent = authenticated && historyLoaded && !historyError
     ? String(postHistory.length)
     : "—";
+  const homeCount = $("#overview-history-count");
+  if (homeCount) {
+    homeCount.textContent = authenticated && historyLoaded && !historyError
+      ? String(postHistory.length)
+      : "—";
+  }
+  renderOverviewPosts();
   for (const post of postHistory) {
     const row = document.createElement("article");
     row.className = "history-row";
@@ -1260,22 +1346,6 @@ document.querySelectorAll("[data-nav]").forEach((item) => {
     setPage(item.dataset.nav);
   });
 });
-$("#nav-more").addEventListener("click", () => {
-  const menu = $("#nav-more-menu");
-  menu.hidden = !menu.hidden;
-  $("#nav-more").setAttribute("aria-expanded", String(!menu.hidden));
-});
-document.addEventListener("click", (event) => {
-  if (!(event.target instanceof Element) || event.target.closest("#nav-more, #nav-more-menu")) return;
-  $("#nav-more-menu").hidden = true;
-  $("#nav-more").setAttribute("aria-expanded", "false");
-});
-document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape" || $("#nav-more-menu").hidden) return;
-  $("#nav-more-menu").hidden = true;
-  $("#nav-more").setAttribute("aria-expanded", "false");
-  $("#nav-more").focus();
-});
 document.querySelectorAll("[data-compose-nav]").forEach((step) => {
   step.addEventListener("click", () => setComposerStep(step.dataset.composeNav));
 });
@@ -1356,8 +1426,6 @@ $("#content-file").addEventListener("change", (event) => {
 });
 document.querySelectorAll("[data-setup]").forEach((button) => {
   button.addEventListener("click", () => {
-    $("#nav-more-menu").hidden = true;
-    $("#nav-more").setAttribute("aria-expanded", "false");
     $("#setup-dialog").showModal();
   });
 });
@@ -1402,8 +1470,8 @@ $("#unlock-form").addEventListener("submit", async (event) => {
     renderSession();
     await loadAccounts();
     await loadContent();
+    if (authenticated) await loadPostHistory();
     if (activePage === "analytics") await loadAnalytics();
-    if (activePage === "history") await loadPostHistory();
     pendingProvider = null;
     if (provider) await connect(provider, true);
     else if (!accountList.length) notice("Workspace unlocked. Connect a channel to get started.");
@@ -1805,6 +1873,167 @@ $("#instagram-publish-ready").addEventListener("click", async () => {
   scheduleInstagramStatusCheck();
 });
 
+/* ── Theme ─────────────────────────────────────────────────── */
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  try { localStorage.setItem("relay-theme", theme); } catch {}
+}
+
+function toggleTheme() {
+  const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  applyTheme(next);
+  notice(`${next === "light" ? "Light" : "Dark"} theme on.`);
+}
+
+$("#theme-toggle").addEventListener("click", toggleTheme);
+$("#palette-button").addEventListener("click", () => openPalette());
+$("#palette-trigger").addEventListener("click", () => openPalette());
+
+/* ── Command palette ───────────────────────────────────────── */
+const paletteCommands = [
+  { label: "Home", hint: "Overview", icon: "home", group: "Go to", run: () => setPage("overview") },
+  { label: "Create a post", hint: "Compose", icon: "plus", group: "Go to", run: () => setPage("publish") },
+  { label: "Media library", hint: "Upload and reuse", icon: "media", group: "Go to", run: () => setPage("content") },
+  { label: "Channels", hint: "Connect accounts", icon: "link", group: "Go to", run: () => setPage("connections") },
+  { label: "Analytics", hint: "Performance", icon: "chart", group: "Go to", run: () => setPage("analytics") },
+  { label: "Post history", hint: "Everything published", icon: "history", group: "Go to", run: () => setPage("history") },
+  { label: "Toggle theme", hint: "⌘J", icon: "moon", group: "Actions", run: toggleTheme },
+  { label: "Unlock workspace", hint: "Enter service key", icon: "lock", group: "Actions", run: () => showUnlock() },
+  { label: "Lock workspace", hint: "Sign out of this browser", icon: "lock", group: "Actions", run: () => lockWorkspace() },
+  { label: "Connect Instagram", hint: "OAuth popup", icon: "instagram", group: "Actions", run: () => connect("instagram") },
+  { label: "Connect YouTube", hint: "OAuth popup", icon: "youtube", group: "Actions", run: () => connect("youtube") },
+  { label: "Setup guide", hint: "Callback URLs", icon: "book", group: "Actions", run: () => $("#setup-dialog").showModal() },
+  { label: "API reference", hint: "Opens /docs", icon: "external", group: "Actions", run: () => window.open("/docs", "_blank", "noopener") },
+];
+
+let paletteMatches = [];
+let paletteIndex = 0;
+
+function openPalette() {
+  const dialog = $("#palette-dialog");
+  if (dialog.open) { dialog.close(); return; }
+  $("#palette-input").value = "";
+  renderPalette("");
+  dialog.showModal();
+  $("#palette-input").focus();
+}
+
+function renderPalette(query) {
+  const list = $("#palette-list");
+  const needle = query.trim().toLowerCase();
+  paletteMatches = paletteCommands.filter((command) =>
+    !needle || `${command.label} ${command.hint} ${command.group}`.toLowerCase().includes(needle));
+  paletteIndex = 0;
+  list.replaceChildren();
+  if (!paletteMatches.length) {
+    const empty = document.createElement("p");
+    empty.className = "palette-empty";
+    empty.textContent = "No matching commands.";
+    list.append(empty);
+    return;
+  }
+  let group = null;
+  paletteMatches.forEach((command, index) => {
+    if (command.group !== group) {
+      group = command.group;
+      const heading = document.createElement("p");
+      heading.className = "palette-group";
+      heading.textContent = group;
+      list.append(heading);
+    }
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "palette-item";
+    item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", String(index === paletteIndex));
+    item.append(icon(command.icon));
+    const label = document.createElement("span");
+    label.textContent = command.label;
+    item.append(label);
+    const hint = document.createElement("small");
+    hint.textContent = command.hint;
+    item.append(hint);
+    item.addEventListener("click", () => runPalette(index));
+    item.addEventListener("mousemove", () => {
+      paletteIndex = index;
+      [...list.querySelectorAll(".palette-item")].forEach((node, i) =>
+        node.setAttribute("aria-selected", String(i === index)));
+    });
+    list.append(item);
+  });
+}
+
+function runPalette(index) {
+  const command = paletteMatches[index];
+  $("#palette-dialog").close();
+  if (command) window.setTimeout(() => command.run(), 0);
+}
+
+function movePalette(delta) {
+  if (!paletteMatches.length) return;
+  paletteIndex = (paletteIndex + delta + paletteMatches.length) % paletteMatches.length;
+  const items = [...$("#palette-list").querySelectorAll(".palette-item")];
+  items.forEach((node, i) => node.setAttribute("aria-selected", String(i === paletteIndex)));
+  items[paletteIndex]?.scrollIntoView({ block: "nearest" });
+}
+
+$("#palette-input").addEventListener("input", (event) => renderPalette(event.target.value));
+$("#palette-input").addEventListener("keydown", (event) => {
+  if (event.key === "ArrowDown") { event.preventDefault(); movePalette(1); }
+  else if (event.key === "ArrowUp") { event.preventDefault(); movePalette(-1); }
+  else if (event.key === "Enter") { event.preventDefault(); runPalette(paletteIndex); }
+});
+$("#palette-dialog").addEventListener("click", (event) => {
+  if (event.target === $("#palette-dialog")) $("#palette-dialog").close();
+});
+
+/* ── Keyboard shortcuts ────────────────────────────────────── */
+const pageKeys = { h: "overview", n: "publish", l: "content", c: "connections", a: "analytics", y: "history" };
+let pendingGoto = false;
+
+async function lockWorkspace() {
+  if (!authenticated) { showUnlock(); return; }
+  try {
+    await api("/session", { method: "DELETE" });
+    authenticated = false;
+    renderSession();
+    notice("Workspace locked. Your accounts are still connected.");
+  } catch (error) { notice(error.message, true); }
+}
+
+function isTyping(event) {
+  const node = event.target;
+  return node instanceof HTMLElement &&
+    (node.tagName === "INPUT" || node.tagName === "TEXTAREA" || node.tagName === "SELECT" || node.isContentEditable);
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.defaultPrevented) return;
+  const meta = event.metaKey || event.ctrlKey;
+  if (meta && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    openPalette();
+    return;
+  }
+  if (meta && event.key.toLowerCase() === "j") {
+    event.preventDefault();
+    toggleTheme();
+    return;
+  }
+  if (isTyping(event) || meta || event.altKey) return;
+  if ($("#palette-dialog").open) return;
+  const openDialog = document.querySelector("dialog[open]");
+  if (openDialog) return;
+
+  if (event.key === "n") { event.preventDefault(); setPage("publish"); return; }
+  if (event.key === "g") { pendingGoto = true; window.setTimeout(() => { pendingGoto = false; }, 1200); return; }
+  if (pendingGoto && pageKeys[event.key]) {
+    event.preventDefault();
+    pendingGoto = false;
+    setPage(pageKeys[event.key]);
+  }
+});
+
 async function initialize() {
   try {
     const initialPage = window.location.hash.slice(1);
@@ -1839,8 +2068,8 @@ async function initialize() {
     }
     await loadAccounts();
     await loadContent();
+    if (authenticated) await loadPostHistory();
     if (activePage === "analytics") await loadAnalytics();
-    if (activePage === "history") await loadPostHistory();
     const params = new URLSearchParams(window.location.search);
     const connected = params.get("connected");
     const error = params.get("oauth_error");

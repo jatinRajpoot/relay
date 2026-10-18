@@ -23,6 +23,16 @@ The API reference remains at <http://localhost:8000/docs>. Click **Authorize** a
 
 The default SQLite file is `data/relay.sqlite3`. Preserve `TOKEN_ENCRYPTION_KEY`; changing it makes existing tokens unreadable. `.env`, virtual environments and local databases are ignored by Git. Disable access logging as shown because OAuth callbacks contain authorization codes. Avoid enabling HTTP debug logs, which may contain provider tokens.
 
+## Using the workspace
+
+The workspace is a dark-first studio UI with a light theme. The theme follows your OS on first load and is remembered per browser after that; toggle it with the sun icon in the sidebar, `⌘J` / `Ctrl+J`, or the command menu.
+
+Press `⌘K` / `Ctrl+K` (or the search icon) for the command menu: jump to any page, create a post, connect a channel, open the setup guide, or toggle the theme. Outside text fields, `n` opens the composer and `g` followed by `h`/`n`/`l`/`c`/`a`/`y` jumps to Home, Create, Media, Channels, Analytics, or History.
+
+Home is a status dashboard: channel, media and published counts, the setup checklist, recent media, connected channels, and the last three published posts. **Create post** keeps media, channels, and details on one page with a sticky preview and publish panel, so you can scroll back and change anything before sending. Instagram still requires a separate confirmation before a post goes live; the delivery panel tracks each destination individually.
+
+On screens narrower than 720px the sidebar is replaced by a bottom tab bar and the composer stacks into a single column.
+
 ## Configure the provider dashboards
 
 ### YouTube
