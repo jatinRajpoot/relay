@@ -323,9 +323,7 @@ class Providers:
             reached_start = False
             for item in page:
                 try:
-                    published_at = datetime.fromisoformat(
-                        item["timestamp"].replace("Z", "+00:00")
-                    )
+                    published_at = datetime.fromisoformat(item["timestamp"])
                 except (KeyError, TypeError, ValueError):
                     continue
                 if published_at.date().isoformat() < start_date:

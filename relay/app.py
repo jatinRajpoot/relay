@@ -2,8 +2,9 @@ import asyncio
 import mimetypes
 import re
 import secrets
+import sqlite3
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import date, timedelta
 from pathlib import Path
 from tempfile import SpooledTemporaryFile
@@ -567,11 +568,11 @@ def create_app(settings: Settings | None = None, transport=None):
             item = store.create_content_item(
                 filename, media_type, file.size, object_name, media_url
             )
-        except Exception:
-            try:
+        except (sqlite3.Error, GoogleAPIError, GoogleAuthError, OSError):
+            # The object is already in the bucket, so drop it rather than leave an
+            # orphan behind when the library row could not be written.
+            with suppress(GoogleAPIError, GoogleAuthError, OSError):
                 blob.delete()
-            except Exception:
-                pass
             raise HTTPException(
                 502, "Could not save the uploaded media to your content library."
             ) from None
@@ -702,7 +703,10 @@ def create_app(settings: Settings | None = None, transport=None):
             try:
                 from google.cloud import storage
 
-                temporary_file = SpooledTemporaryFile(max_size=1024 * 1024, mode="w+b")
+                # Spooled to disk past 1 MiB and closed by the upload's finally block.
+                temporary_file = SpooledTemporaryFile(  # noqa: SIM115
+                    max_size=1024 * 1024, mode="w+b"
+                )
                 storage.Client().bucket(settings.instagram_media_bucket).blob(
                     item["object_name"]
                 ).download_to_file(temporary_file)
