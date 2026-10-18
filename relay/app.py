@@ -172,6 +172,17 @@ def create_app(settings: Settings | None = None, transport=None):
             raise HTTPException(404, "Connected account not found.")
         return account
 
+    def decrypted(account, field="access_token"):
+        # A rotated TOKEN_ENCRYPTION_KEY or a database restored under another key makes
+        # stored tokens unreadable. Report that as a reconnect for this account rather
+        # than crashing every request that touches the workspace.
+        try:
+            return store.decrypt(account[field])
+        except InvalidToken:
+            raise HTTPException(
+                409, "Stored credentials can't be read. Reconnect this account."
+            ) from None
+
     async def valid_account(account_id, provider=None, force=False):
         # Serialize refreshes per account and re-read after obtaining the lock.
         lock = refresh_locks.setdefault(account_id, asyncio.Lock())
@@ -191,8 +202,8 @@ def create_app(settings: Settings | None = None, transport=None):
                         return account
                 tokens = await app.state.providers.refresh(
                     account["provider"],
-                    store.decrypt(account["access_token"]),
-                    store.decrypt(account["refresh_token"]),
+                    decrypted(account),
+                    decrypted(account, "refresh_token"),
                 )
                 account = store.update_tokens(account_id, tokens)
             return account
@@ -209,7 +220,7 @@ def create_app(settings: Settings | None = None, transport=None):
         account = await valid_account(post["account_id"], "instagram")
         remote = await app.state.providers.instagram_status(
             post["container_id"],
-            store.decrypt(account["access_token"]),
+            decrypted(account),
         )
         if post["status"] == "publishing" and remote != "PUBLISHED":
             return post
@@ -446,7 +457,7 @@ def create_app(settings: Settings | None = None, transport=None):
                     avatar_url = await app.state.providers.account_avatar(
                         account["provider"],
                         account["external_id"],
-                        store.decrypt(account["access_token"]),
+                        decrypted(account),
                     )
                 except HTTPException:
                     # A missing avatar should never prevent account selection.
@@ -473,7 +484,7 @@ def create_app(settings: Settings | None = None, transport=None):
             }
             try:
                 account = await valid_account(account["id"], account["provider"])
-                token = store.decrypt(account["access_token"])
+                token = decrypted(account)
                 if account["provider"] == "youtube":
                     item.update(
                         await app.state.providers.youtube_analytics(
@@ -624,7 +635,7 @@ def create_app(settings: Settings | None = None, transport=None):
         account = await valid_account(body.account_id, "instagram")
         container_id = await app.state.providers.create_instagram_post(
             account["external_id"],
-            store.decrypt(account["access_token"]),
+            decrypted(account),
             body.media_type,
             str(body.media_url),
             body.caption,
@@ -658,7 +669,7 @@ def create_app(settings: Settings | None = None, transport=None):
         try:
             media_id = await app.state.providers.publish_instagram(
                 account["external_id"],
-                store.decrypt(account["access_token"]),
+                decrypted(account),
                 post["container_id"],
             )
         except Exception:
@@ -738,7 +749,7 @@ def create_app(settings: Settings | None = None, transport=None):
                 },
             }
             uploaded = await app.state.providers.upload_youtube(
-                store.decrypt(account["access_token"]),
+                decrypted(account),
                 file,
                 metadata,
             )
