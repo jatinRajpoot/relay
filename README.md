@@ -167,6 +167,9 @@ Deployed in project `aitryout-485605`, Mumbai (`asia-south1`):
 
 The service uses request-based billing, minimum **0** instances, maximum **1** instance,
 0.25 vCPU, 256 MiB memory, concurrency 1, and one worker. Cold starts are expected.
+The container runs uvicorn with `--proxy-headers --forwarded-allow-ips=*` because traffic
+only arrives through the platform front end; without it every request would appear to come
+from the proxy and the per-address sign-in throttle would cover all users at once.
 The cloud upload limit is **20 MiB**, including a separate 1 MiB multipart allowance.
 Cloud Run HTTP/1 request limits and in-memory temporary files make the local 2 GiB
 upload default unsuitable here. Large video uploads need a different upload design.
