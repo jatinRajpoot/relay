@@ -95,6 +95,20 @@ def test_credentials_validation_origin_and_throttling(settings):
         }).status_code == 429
 
 
+def test_stale_workspace_pin_does_not_404_the_shell(settings):
+    with TestClient(create_app(settings)) as client:
+        signup(client)
+        stale = {"X-Workspace-ID": "deleted-workspace"}
+        assert client.get("/", headers=stale).status_code == 200
+        assert client.get("/app", headers=stale).status_code == 200
+        redirect = client.get("/login", headers=stale, follow_redirects=False)
+        assert redirect.status_code == 303
+        assert redirect.headers["location"] == "/app"
+        # API routes still refuse a workspace the caller does not own.
+        assert client.get("/session", headers=stale).status_code == 404
+        assert client.get("/accounts", headers=stale).status_code == 404
+
+
 def test_users_workspaces_and_every_resource_are_isolated(settings):
     app = create_app(settings, httpx.MockTransport(youtube_provider))
     with TestClient(app) as alice, TestClient(app) as bob:
