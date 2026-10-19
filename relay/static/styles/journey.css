@@ -18,6 +18,8 @@
 .composer-start p { margin: 0; color: var(--muted); font-size: 13px; }
 .composer { grid-template-columns: minmax(0, 1fr) minmax(230px, .38fr); gap: 24px; }
 .composer-editor { padding: 24px; border-radius: 32px; border-color: transparent; }
+/* Keep long captions inside the editor instead of letting the textarea force it wider/taller. */
+.platform-block > textarea { box-sizing: border-box; min-width: 0; min-height: 0; overflow: auto; overflow-wrap: anywhere; }
 .composer-channel-strip { border-color: transparent; border-radius: 24px; padding: 20px; }
 #journey-add-channel { margin-top: 12px; font-size: 13px; }
 #youtube-details { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line); }
