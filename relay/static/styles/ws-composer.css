@@ -1,0 +1,1099 @@
+/* Composer and publishing surface.
+   Contract: this sheet owns the create-post screen only. It may use every
+   primitive in base.css but must not restyle them. All hooks used by
+   composer.js / publishing.js / recovery.js are preserved verbatim:
+   #publish-caption, .composer-action-bar, #publish-submit, .publish-result-row,
+   .result-status-badge, .profile-pill, #recovered-section, .drawer, .picker-grid. */
+
+.composer-form {
+  display: block;
+}
+
+/* A calm single column: the writing surface leads, the preview is a quiet
+   sticky companion. No numbered wizard chrome. */
+.composer {
+  display: block;
+}
+
+.composer-flow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr);
+  align-items: start;
+  column-gap: var(--space-5);
+  row-gap: var(--space-4);
+}
+
+.composer-flow > :not(.composer-side) {
+  grid-column: 1;
+}
+
+/* Sections are separated by a hairline and space, not stacked as cards. */
+.composer-section {
+  min-width: 0;
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--raised);
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.section-head h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+
+.section-head h2 .icon {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+
+.media-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+.empty-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.media-empty strong {
+  display: block;
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.media-empty p {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.media-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.selected-attachment {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+.attachment-thumbnail {
+  width: 88px;
+  height: 88px;
+  flex: none;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+}
+
+.attachment-thumbnail img,
+.attachment-thumbnail video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.attachment-meta {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.attachment-meta strong {
+  overflow: hidden;
+  font-size: var(--text-base);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-meta small {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.media-preview-fallback {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  color: var(--muted);
+  text-align: center;
+}
+
+.media-preview-fallback .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.media-preview-fallback small {
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.attachment-remove {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.attachment-remove:hover {
+  border-color: var(--line-strong);
+  background: var(--soft);
+  color: var(--ink);
+}
+
+/* ── Destination chips ───────────────────────────────────── */
+.profile-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* A pill carries a name and a note; at 320px an unbreakable long name would
+   push the note past the viewport, so both may shrink and wrap. */
+.profile-pill {
+  position: relative;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 14px 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--paper);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.profile-pill-copy,
+.profile-pill-notes {
+  display: contents;
+}
+
+.profile-pill:has(input:focus-visible) {
+  outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+/* Selected is a chosen object: accent border plus a soft tint, no glow. */
+.profile-pill.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.profile-pill.selected::after {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  content: "✓";
+  font-size: 11px;
+  line-height: 1;
+}
+
+.profile-pill.incompatible {
+  opacity: .72;
+}
+
+/* A channel Relay cannot read credentials for is disabled, not merely unsuited
+   to this file: it stays legible and says "reconnect" rather than fading out. */
+.profile-pill.needs-reconnect {
+  opacity: 1;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+.profile-pill input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.profile-pill-name {
+  min-width: 0;
+  max-width: 190px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-pill-platform {
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--soft);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+
+.profile-pill.selected .profile-pill-platform {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent-ink);
+}
+
+.profile-pill-note {
+  display: inline-flex;
+  align-items: center;
+  min-height: 19px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--soft);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.profile-avatar {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.profile-avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-platform-badge {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--raised);
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.profile-platform-badge svg {
+  width: 8px;
+  height: 8px;
+}
+
+.inline-empty {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.inline-empty p {
+  flex: 1;
+  min-width: 200px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+#publish-caption {
+  min-height: 150px;
+  border-color: var(--line);
+  background: var(--paper);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+#instagram-details .section-head {
+  align-items: baseline;
+}
+
+/* Counters and character limits are instrument readings: mono, tabular. */
+#caption-count,
+.field-meta {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Action bar ──────────────────────────────────────────── */
+/* Desktop keeps actions in the form flow. On mobile the bar becomes sticky only
+   after it reaches its normal position, then returns to flow before delivery
+   history enters the action tray's viewport space. */
+.composer-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--raised);
+}
+
+.action-summary {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.action-summary strong {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.action-summary small {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* The unmet requirement, adjacent to the disabled Send control. */
+.composer-blocker {
+  margin-top: var(--space-1);
+  color: var(--warning);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.composer-action-buttons {
+  display: flex;
+  flex: none;
+  gap: var(--space-2);
+}
+
+#publish-submit {
+  min-width: 150px;
+  white-space: nowrap;
+}
+
+/* ── Preview ─────────────────────────────────────────────── */
+.composer-side {
+  position: sticky;
+  top: 78px;
+  grid-column: 2;
+  grid-row: 1 / span 6;
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+}
+
+.composer-mobile-preview-toggle {
+  display: none;
+}
+
+.composer-mobile-preview-toggle .icon {
+  transform: rotate(90deg);
+  transition: transform 160ms ease;
+}
+
+.composer-mobile-preview-toggle[aria-expanded="true"] .icon {
+  transform: rotate(-90deg);
+}
+
+.preview-pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: var(--space-3);
+}
+
+.preview-pane-head h2 {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.preview-switcher {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+.preview-switcher button {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.preview-switcher button[aria-selected="true"] {
+  background: var(--raised);
+  color: var(--ink);
+}
+
+#preview-panel:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 4px;
+}
+
+.social-preview-card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--raised);
+}
+
+.social-preview-account {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: var(--space-2) var(--space-3);
+}
+
+.social-preview-account strong {
+  overflow: hidden;
+  flex: 1;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* No decorative gradient: an empty preview is a quiet paper field. */
+.preview-media {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  max-height: 420px;
+  background: var(--paper);
+  color: var(--muted);
+}
+
+.preview-media > span {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+}
+
+.preview-media small {
+  font-size: var(--text-xs);
+}
+
+.preview-media img,
+.preview-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.social-preview-copy {
+  min-height: 86px;
+  padding: var(--space-3);
+}
+
+.social-preview-copy > strong {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.social-preview-copy p {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+}
+
+.preview-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-bottom: 7px;
+}
+
+.preview-chip {
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--soft);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* ── Delivery receipts ───────────────────────────────────── */
+.results-section .section-head {
+  align-items: flex-start;
+  margin-bottom: var(--space-2);
+}
+
+.results-section .section-meta {
+  margin-bottom: var(--space-2);
+}
+
+.status-summary {
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.status-summary.published {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.status-summary.attention {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.results-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* A receipt is a row, not a card: hairline, paper, one line of status. */
+.publish-result-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+.publish-result-row.failed {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+}
+
+/* A receipt that cannot be proven to belong to the post on screen. It stays in
+   "Earlier deliveries" and is marked, never attached to the current send. */
+.publish-result-row.unassociated {
+  border-style: dashed;
+  border-color: var(--line-strong);
+}
+
+.recovered-unassociated {
+  margin: 0 0 var(--space-2);
+  color: var(--muted);
+  max-width: 62ch;
+}
+
+.publish-result-copy {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.publish-result-copy strong {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.publish-result-copy small {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+.publish-result-platform {
+  color: var(--ink-soft) !important;
+  font-size: var(--text-xs) !important;
+  font-weight: 600;
+}
+
+.publish-result-error {
+  color: var(--danger) !important;
+}
+
+.publish-result-updated {
+  color: var(--faint) !important;
+}
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  flex: none;
+}
+
+.result-action {
+  min-height: 36px;
+}
+
+.result-open-link {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 6px;
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-underline-offset: 3px;
+}
+
+/* Earlier deliveries are a quieter register than this submission. */
+#recovered-section {
+  border-style: dashed;
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--soft) 55%, var(--raised));
+}
+
+#recovered-section .section-head h2 {
+  font-size: var(--text-base);
+}
+
+#recovered-section .section-head p {
+  margin-top: 2px;
+}
+
+@media (max-width: 560px) {
+  /* At narrow widths the generic .section-head wrap drops Refresh onto its own row,
+     below the description, adding a full row of dead height to a section that is
+     already long. Let the copy column shrink and wrap internally instead, so the
+     action stays on the heading row. */
+  #recovered-section .section-head {
+    flex-wrap: nowrap;
+    align-items: flex-start;
+  }
+
+  #recovered-section .section-head > div {
+    min-width: 0;
+  }
+
+  #recovered-section .section-head .button {
+    flex: none;
+    margin-top: -4px;
+  }
+}
+
+/* ── Media picker ────────────────────────────────────────── */
+.drawer {
+  width: min(880px, calc(100vw - 28px));
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.drawer-head h2 {
+  font: 400 var(--text-xl)/1.2 var(--serif);
+  letter-spacing: -.02em;
+}
+
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.composer-media-option {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink);
+  text-align: left;
+}
+
+.composer-media-option.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.composer-media-option:disabled {
+  opacity: .55;
+}
+
+.composer-media-preview {
+  position: relative;
+  aspect-ratio: 1;
+  display: block;
+  overflow: hidden;
+  background: var(--soft);
+}
+
+.composer-media-preview img,
+.composer-media-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-play-marker {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgb(16 22 18 / 75%);
+  color: #fff;
+  font-size: 11px;
+}
+
+.composer-media-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+}
+
+.composer-media-copy strong {
+  overflow: hidden;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-media-copy small {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.media-selected-mark {
+  display: none;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 1180px) {
+  .composer-flow {
+    grid-template-columns: minmax(0, 1.1fr) minmax(250px, .7fr);
+  }
+}
+
+@media (max-width: 960px) {
+  .composer-flow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .composer-side {
+    position: static;
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .preview-media {
+    aspect-ratio: 1.2;
+  }
+}
+
+@media (max-width: 860px) {
+  /* Mobile follows the writing task, with an early preview affordance. */
+  .composer-flow > :not(.composer-side) { grid-column: 1; }
+  .composer-flow > .composer-section[aria-labelledby="composer-media-title"] { order: 0; }
+  .composer-flow > #instagram-details,
+  .composer-flow > #youtube-details { order: 1; }
+  .composer-flow > #composer-preview-toggle { order: 2; }
+  .composer-flow > .composer-side { order: 3; }
+  .composer-flow > .composer-section[aria-labelledby="composer-destinations-title"] { order: 4; }
+  .composer-flow > .composer-action-bar { order: 5; }
+
+  .composer-mobile-preview-toggle {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+    grid-column: 1;
+  }
+
+  .composer-side {
+    display: none;
+  }
+
+  .composer-side.is-expanded {
+    display: block;
+  }
+
+  /* Let the action bar enter the viewport after the form, then keep it visible
+     above navigation. The observer releases it before delivery history. */
+  .composer-action-bar {
+    position: sticky;
+    top: calc(100dvh - 210px - env(safe-area-inset-bottom));
+    bottom: auto;
+    z-index: 20;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 7px;
+    padding: 8px 10px;
+    background: var(--raised);
+    box-shadow: 0 10px 26px rgb(20 28 23 / 12%);
+  }
+
+  .composer-action-bar.is-static {
+    position: static;
+    top: auto;
+    margin-top: var(--space-4);
+    box-shadow: none;
+  }
+
+  .composer-action-bar .action-summary small { display: none; }
+
+  .composer-action-buttons {
+    width: 100%;
+  }
+
+  .composer-action-buttons .button {
+    flex: 1;
+  }
+
+  .composer-blocker {
+    font-size: var(--text-xs);
+  }
+
+  .profile-pill {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: start;
+    gap: 5px 7px;
+    min-height: 68px;
+    padding: 6px 8px;
+    border-radius: var(--radius);
+  }
+
+  .profile-pills {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .profile-pill .profile-avatar {
+    grid-column: 1;
+    grid-row: 1;
+    width: 26px;
+    height: 26px;
+  }
+
+  .profile-pill-copy {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .profile-pill-name {
+    max-width: none;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 650;
+    line-height: 1.25;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .profile-pill-platform {
+    padding: 1px 7px;
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .profile-pill-platform {
+    flex: none;
+  }
+
+  .profile-pill-notes {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 7px;
+  }
+
+  .profile-pill-note {
+    min-height: 16px;
+    padding: 2px 6px;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .picker-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Reserve the fixed bottom nav plus a comfortable gap so the action bar is
+     never clipped behind it. */
+  [data-page-view="publish"] {
+    padding-bottom: 62px;
+  }
+}
+
+@media (max-width: 560px) {
+  .composer-page-heading {
+    margin-bottom: var(--space-3);
+    padding-bottom: var(--space-3);
+  }
+
+  .composer-page-heading p {
+    font-size: var(--text-sm);
+  }
+
+  .selected-attachment {
+    gap: var(--space-2);
+    padding: 8px;
+  }
+
+  .attachment-thumbnail {
+    width: 56px;
+    height: 56px;
+  }
+
+  #publish-caption {
+    height: 112px;
+    min-height: 112px;
+  }
+
+  .composer-section {
+    padding: var(--space-4);
+  }
+
+  .section-head {
+    flex-wrap: wrap;
+  }
+
+  /* No room for a single-line filename beside the thumbnail: let it wrap. */
+  .attachment-meta strong {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  /* A delivery row has four parts; below 560px the copy needs the full width. */
+  .publish-result-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    row-gap: var(--space-2);
+  }
+
+  .publish-result-row .profile-avatar {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .publish-result-copy {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .result-open-link {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .result-actions {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .publish-result-row .result-status-badge {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: start;
+  }
+}
+
+@media (max-width: 380px) {
+  /* At 390px and below the stacked buttons must keep their labels on one line;
+     Send is the primary action and is never truncated. */
+  .composer-action-buttons {
+    flex-direction: column;
+  }
+
+  .composer-action-buttons .button {
+    width: 100%;
+  }
+}

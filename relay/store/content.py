@@ -3,8 +3,10 @@ import time
 
 
 class ContentStore:
-    def create_content_item(self, filename, content_type, size, object_name, media_url):
-        content_id = secrets.token_hex(16)
+    def create_content_item(
+        self, filename, content_type, size, object_name, media_url, content_id=None
+    ):
+        content_id = content_id or secrets.token_hex(16)
         created_at = int(time.time())
         with self.connection() as db:
             db.execute(

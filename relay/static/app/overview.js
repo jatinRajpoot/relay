@@ -1,75 +1,168 @@
 "use strict";
 
+/* ── Home ────────────────────────────────────────────────────
+   Home answers three questions: is there work to resume, what did Relay
+   deliver, and which channels can it send to. It never shows a dashboard of
+   zeros or metrics that don't exist. */
+
+function draftSummary(draft) {
+  const content = draftContent(draft);
+  const parts = [];
+  const item = contentItems.find((contentItem) => contentItem.id === content.media);
+  if (item) parts.push(item.filename);
+  if (content.title || content.caption || content.description) parts.push("copy added");
+  const accounts = (draft.selectedAccountIds || [])
+    .map((id) => accountList.find((account) => account.id === id))
+    .filter(Boolean);
+  if (accounts.length) parts.push(`${accounts.length} channel${accounts.length === 1 ? "" : "s"}`);
+  if (content.unresolved) parts.push("unfinished delivery");
+  return parts.join(" · ");
+}
+
+function renderHomeDraft() {
+  const card = $("#home-draft-card");
+  if (!card) return;
+  const draft = readLocalDraft();
+  const show = authenticated && draftHasContent(draft);
+  card.hidden = !show;
+  const resume = $("#home-resume-draft");
+  resume.hidden = !show;
+  if (!show) return;
+  setText("#home-draft-detail", draftSummary(draft));
+  resume.textContent = "Continue draft";
+  const thumb = $("#home-draft-thumb");
+  const item = contentItems.find((contentItem) => contentItem.id === draftContent(draft).media);
+  if (item?.content_type.startsWith("image/")) {
+    thumb.onerror = () => { thumb.hidden = true; };
+    thumb.src = item.media_url;
+    thumb.hidden = false;
+  } else {
+    thumb.removeAttribute("src");
+    thumb.hidden = true;
+  }
+}
+
+/* The Home primary action must agree with the rail: both open the composer,
+   whether the composer is empty or holding a restored draft. */
+function renderHomePrimaryAction() {
+  const button = $("#overview-primary-action");
+  if (!button) return;
+  const hasDraft = authenticated && draftHasContent(readLocalDraft());
+  const actionArea = button.closest(".intro-actions");
+  if (actionArea) actionArea.hidden = hasDraft;
+  const label = button.querySelector("span");
+  if (!authenticated) {
+    label.textContent = "Sign in to create";
+  } else if (hasDraft) {
+    label.textContent = "Continue draft";
+  } else {
+    label.textContent = "Create a post";
+  }
+  button.querySelector("svg use")?.setAttribute("href", hasDraft ? "#i-arrow" : "#i-plus");
+  button.dataset.intent = hasDraft ? "resume" : "create";
+}
+
+function renderOverviewPosts() {
+  const container = $("#overview-posts");
+  if (!container) return;
+  container.replaceChildren();
+  const note = (text) => el("p", "mini-empty", text);
+
+  if (!authenticated) { container.append(note("Sign in to see what Relay delivered.")); return; }
+  if (historyError) {
+    container.append(note(`${historyError} Your posts are unchanged.`));
+    const retry = el("button", "text-button", "Retry now");
+    retry.type = "button";
+    retry.addEventListener("click", () => void loadPostHistory());
+    container.append(retry);
+    return;
+  }
+  if (!historyLoaded || historyLoading) { container.append(note("Loading recent activity…")); return; }
+  const merged = mergeActivity({
+    attempts: activityAttempts, history: postHistory, draft: null, filter: "all",
+    submission: activeSubmission,
+  });
+  if (!merged.all.length) {
+    container.append(note("Nothing sent from this workspace yet. Your first post will appear here with its delivery outcome."));
+    return;
+  }
+  for (const row of merged.all.slice(0, 3)) {
+    const button = el("button", "mini-post");
+    button.type = "button";
+    const badge = el("span", `mini-post-dot ${row.provider}`);
+    badge.append(icon(row.provider === "youtube" ? "youtube" : "instagram"));
+    const copy = el("span", "mini-post-copy");
+    const when = row.timestamp
+      ? new Date(row.timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+      : "Time unknown";
+    copy.append(
+      el("strong", null, `${phaseLabel(row.phase)} · ${activityTitle(row)}`),
+      el("small", null, `${names[row.provider]} · ${when}`),
+    );
+    button.append(badge, copy);
+    button.addEventListener("click", () => setPage("history"));
+    container.append(button);
+  }
+}
+
 function renderOverview() {
   const primaryAction = $("#overview-primary-action");
   if (!primaryAction) return;
-  $("#overview-channel-count").textContent = authenticated ? String(accountList.length) : "—";
-  $("#overview-media-count").textContent = authenticated ? String(contentItems.length) : "—";
-  const publishedCount = $("#overview-history-count");
-  if (publishedCount) {
-    publishedCount.textContent = authenticated && historyLoaded && !historyError
-      ? String(postHistory.length)
-      : "—";
+
+  renderHomeDraft();
+  renderHomePrimaryAction();
+  renderOverviewPosts();
+
+  const subtitle = $("#overview-subtitle");
+  const draft = readLocalDraft();
+  if (!authenticated) {
+    subtitle.textContent = "Sign in to publish from this workspace.";
+  } else if (!accountList.length) {
+    subtitle.textContent = "Connect a channel, then send your first post.";
+  } else {
+    subtitle.textContent = "Recent posts and channels for this workspace.";
   }
+
   const channelList = $("#overview-channel-list");
   channelList.replaceChildren();
   if (!authenticated || !accountList.length) {
-    const empty = document.createElement("div");
-    empty.className = "overview-channel-empty";
-    const icon = document.createElement("span");
-    icon.className = "channel-mini-icon";
-    const symbol = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    symbol.classList.add("icon");
-    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-    use.setAttribute("href", "#i-link");
-    symbol.append(use);
-    icon.append(symbol);
-    const copy = document.createElement("span");
-    const title = document.createElement("strong");
-    title.textContent = authenticated ? "No channels connected" : "Unlock your workspace";
-    copy.append(title);
-    empty.append(icon, copy);
+    const empty = el("div", "overview-channel-empty");
+    const iconWrap = el("span", "channel-mini-icon");
+    iconWrap.append(icon("link"));
+    const copy = el("span");
+    copy.append(el("strong", null, authenticated ? "No channels connected" : "Sign in to connect channels"));
+    empty.append(iconWrap, copy);
     channelList.append(empty);
-    const action = document.createElement("button");
-    action.className = "overview-channel-action";
+    const action = el("button", "overview-channel-action", authenticated ? "Connect a channel" : "Sign in");
     action.type = "button";
-    action.textContent = authenticated ? "Connect a channel" : "Open channels";
-    action.addEventListener("click", () => setPage("connections"));
+    action.addEventListener("click", () => authenticated ? setPage("connections") : showUnlock());
     channelList.append(action);
-  } else {
-    for (const account of accountList.slice(0, 3)) {
-      const row = document.createElement("div");
-      row.className = "overview-channel-row";
-      const icon = document.createElement("span");
-      icon.className = `channel-mini-icon ${account.provider}`;
-      const symbol = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      symbol.classList.add("icon");
-      const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-      use.setAttribute("href", `#i-${account.provider}`);
-      symbol.append(use);
-      icon.append(symbol);
-      const copy = document.createElement("span");
-      const title = document.createElement("strong");
-      const detail = document.createElement("small");
-      title.textContent = account.name;
-      detail.textContent = names[account.provider];
-      copy.append(title, detail);
-      const expired = account.expires_at * 1000 <= Date.now();
-      const status = document.createElement("span");
-      status.className = `overview-channel-status${expired ? " expired" : ""}`;
-      status.textContent = expired ? "Reconnect" : "Connected";
-      row.append(icon, copy, status);
-      channelList.append(row);
-    }
-    if (accountList.length > 3) {
-      const more = document.createElement("small");
-      more.className = "overview-channel-more";
-      more.textContent = `+ ${accountList.length - 3} more ${accountList.length - 3 === 1 ? "channel" : "channels"}`;
-      channelList.append(more);
-    }
+    return;
   }
-
+  for (const account of accountList.slice(0, 4)) {
+    const row = el("div", "overview-channel-row");
+    const iconWrap = el("span", `channel-mini-icon ${account.provider}`);
+    iconWrap.append(icon(account.provider));
+    const copy = el("span");
+    copy.append(el("strong", null, account.name), el("small", null, names[account.provider]));
+    // Home uses the same readiness predicate as Channels and the composer, so a
+    // channel that cannot send is never presented here as "Connected".
+    const readiness = channelStatus(account, "home");
+    const status = el("span", `overview-channel-status${readiness.reconnect ? " expired" : ""}`, readiness.label);
+    if (readiness.unreadable) {
+      status.title = "Relay can't read this channel's saved authorization. Reconnect it to send again.";
+    } else if (readiness.expired && !readiness.reconnect) {
+      status.title = "Relay refreshes this channel's access automatically before sending.";
+    }
+    row.append(iconWrap, copy, status);
+    channelList.append(row);
+  }
+  if (accountList.length > 4) {
+    channelList.append(el("small", "overview-channel-more", `+ ${accountList.length - 4} more`));
+  }
 }
+
+/* ── Insights ──────────────────────────────────────────────── */
 
 function formattedMetric(value) {
   return new Intl.NumberFormat().format(Number(value) || 0);
@@ -84,12 +177,9 @@ function renderAnalytics() {
   error.hidden = !authenticated || !analyticsError;
   error.replaceChildren();
   if (analyticsError) {
-    const message = document.createElement("span");
-    message.textContent = `${analyticsError} Your channel data is unchanged.`;
-    const retry = document.createElement("button");
-    retry.className = "button button-ghost button-sm";
+    const message = el("span", null, `${analyticsError} Your channel data is unchanged.`);
+    const retry = el("button", "button button-ghost button-sm", "Retry now");
     retry.type = "button";
-    retry.textContent = "Retry now";
     retry.addEventListener("click", () => void loadAnalytics());
     error.append(message, retry);
   }
@@ -106,45 +196,27 @@ function renderAnalytics() {
 }
 
 function makeAnalyticsCard(account, period) {
-  const card = document.createElement("article");
-  card.className = `analytics-account-card ${account.provider}`;
-  const heading = document.createElement("div");
-  heading.className = "analytics-account-heading";
-  const identity = document.createElement("div");
-  identity.className = "analytics-identity";
-  const icon = document.createElement("span");
-  icon.className = `channel-mini-icon ${account.provider}`;
-  const iconSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  iconSvg.classList.add("icon");
-  const iconUse = document.createElementNS("http://www.w3.org/2000/svg", "use");
-  iconUse.setAttribute("href", `#i-${account.provider}`);
-  iconSvg.append(iconUse);
-  icon.append(iconSvg);
-  const title = document.createElement("span");
-  title.className = "analytics-account-title";
-  const name = document.createElement("strong");
-  name.textContent = account.name;
-  const subtitle = document.createElement("small");
-  subtitle.textContent = `${names[account.provider]} · ${period.start_date} – ${period.end_date}`;
-  title.append(name, subtitle);
-  identity.append(icon, title);
-  const badge = document.createElement("span");
-  badge.className = `analytics-platform-badge ${account.provider}`;
-  badge.textContent = names[account.provider];
-  heading.append(identity, badge);
+  const card = el("article", `analytics-account-card ${account.provider}`);
+  const heading = el("div", "analytics-account-heading");
+  const identity = el("div", "analytics-identity");
+  const iconWrap = el("span", `channel-mini-icon ${account.provider}`);
+  iconWrap.append(icon(account.provider));
+  const title = el("span", "analytics-account-title");
+  title.append(
+    el("strong", null, account.name),
+    el("small", null, `${names[account.provider]} · ${period.start_date} – ${period.end_date}`),
+  );
+  identity.append(iconWrap, title);
+  heading.append(identity, el("span", `analytics-platform-badge ${account.provider}`, names[account.provider]));
   card.append(heading);
 
   if (account.status !== "ready") {
-    const unavailable = document.createElement("div");
-    unavailable.className = "analytics-unavailable";
-    const copy = document.createElement("p");
-    copy.textContent = account.message || "Analytics are unavailable for this channel.";
-    const action = document.createElement("button");
-    action.className = "text-button";
+    const unavailable = el("div", "analytics-unavailable");
+    unavailable.append(el("p", null, account.message || "Analytics are unavailable for this channel."));
+    const action = el("button", "text-button", "Manage channels →");
     action.type = "button";
-    action.textContent = "Manage channels →";
     action.addEventListener("click", () => setPage("connections"));
-    unavailable.append(copy, action);
+    unavailable.append(action);
     card.append(unavailable);
     return card;
   }
@@ -153,59 +225,41 @@ function makeAnalyticsCard(account, period) {
   const metricList = account.provider === "youtube"
     ? [["Views", metrics.views], ["Likes", metrics.likes], ["Comments", metrics.comments], ["Subscribers gained", metrics.subscribers_gained]]
     : [["Posts", metrics.posts], ["Likes", metrics.likes], ["Comments", metrics.comments], ["Avg. interactions", metrics.average_interactions]];
-  const metricGrid = document.createElement("div");
-  metricGrid.className = "analytics-metrics";
+  const metricGrid = el("div", "analytics-metrics");
   for (const [label, value] of metricList) {
-    const metric = document.createElement("div");
-    metric.className = "analytics-metric";
-    const metricValue = document.createElement("strong");
-    metricValue.textContent = formattedMetric(value);
-    const metricLabel = document.createElement("small");
-    metricLabel.textContent = label;
-    metric.append(metricValue, metricLabel);
+    const metric = el("div", "analytics-metric");
+    metric.append(el("strong", null, formattedMetric(value)), el("small", null, label));
     metricGrid.append(metric);
   }
   card.append(metricGrid);
 
   if (account.provider === "youtube" && account.channel) {
-    const channelSummary = document.createElement("p");
-    channelSummary.className = "analytics-channel-summary";
     const subscribers = account.channel.subscribers == null
       ? "Subscriber count hidden"
       : `${formattedMetric(account.channel.subscribers)} subscribers`;
-    channelSummary.textContent = `${subscribers} · ${formattedMetric(account.channel.views)} lifetime views · ${formattedMetric(account.channel.videos)} videos · ${formattedMetric(metrics.watch_minutes)} watch minutes this period`;
-    card.append(channelSummary);
+    card.append(el("p", "analytics-channel-summary",
+      `${subscribers} · ${formattedMetric(account.channel.views)} lifetime views · ${formattedMetric(account.channel.videos)} videos · ${formattedMetric(metrics.watch_minutes)} watch minutes this period`));
   } else if (account.provider === "instagram") {
-    const note = document.createElement("p");
-    note.className = "analytics-channel-summary";
-    note.textContent = "Likes and comments on posts published during this period.";
-    card.append(note);
+    card.append(el("p", "analytics-channel-summary", "Likes and comments on posts published during this period."));
   }
 
   const topPosts = account.top_posts || [];
-  const postsHeading = document.createElement("div");
-  postsHeading.className = "analytics-posts-heading";
-  const postsTitle = document.createElement("h3");
-  postsTitle.textContent = "Top posts";
-  const postsBasis = document.createElement("small");
-  postsBasis.textContent = account.provider === "youtube" ? "Views in this period" : "Likes + comments";
-  postsHeading.append(postsTitle, postsBasis);
+  const postsHeading = el("div", "analytics-posts-heading");
+  postsHeading.append(
+    el("h3", null, "Top posts"),
+    el("small", null, account.provider === "youtube" ? "Views in this period" : "Likes + comments"),
+  );
   card.append(postsHeading);
   if (!topPosts.length) {
-    const noPosts = document.createElement("p");
-    noPosts.className = "analytics-no-posts";
-    noPosts.textContent = "No post data for this period yet.";
-    card.append(noPosts);
+    card.append(el("p", "analytics-no-posts", "No post data for this period yet."));
     return card;
   }
-  const postList = document.createElement("ol");
-  postList.className = "analytics-post-list";
+  const postList = el("ol", "analytics-post-list");
   for (const post of topPosts) {
-    const row = document.createElement("li");
-    const link = document.createElement("a");
-    link.className = "analytics-post-link";
+    const row = el("li");
+    const link = el("a", "analytics-post-link");
     let safeUrl = null;
-    try { safeUrl = post.url ? new URL(post.url, window.location.origin) : null; } catch {}
+    try { safeUrl = post.url ? new URL(post.url, window.location.origin) : null; } catch { /* invalid URL */ }
     const allowedHost = account.provider === "youtube"
       ? ["www.youtube.com", "youtube.com"]
       : ["www.instagram.com", "instagram.com"];
@@ -213,16 +267,13 @@ function makeAnalyticsCard(account, period) {
       link.href = safeUrl.href;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
-    } else {
-      link.removeAttribute("href");
     }
-    const postTitle = document.createElement("strong");
-    postTitle.textContent = post.title || "Untitled post";
-    const postDetails = document.createElement("small");
-    postDetails.textContent = account.provider === "youtube"
-      ? `${formattedMetric(post.views)} views · ${formattedMetric(post.likes)} likes · ${formattedMetric(post.comments)} comments`
-      : `${formattedMetric(post.likes)} likes · ${formattedMetric(post.comments)} comments`;
-    link.append(postTitle, postDetails);
+    link.append(
+      el("strong", null, post.title || "Untitled post"),
+      el("small", null, account.provider === "youtube"
+        ? `${formattedMetric(post.views)} views · ${formattedMetric(post.likes)} likes · ${formattedMetric(post.comments)} comments`
+        : `${formattedMetric(post.likes)} likes · ${formattedMetric(post.comments)} comments`),
+    );
     row.append(link);
     postList.append(row);
   }
@@ -255,10 +306,51 @@ async function loadAnalytics() {
   }
 }
 
+/* ── Routing ───────────────────────────────────────────────── */
+
+const PAGE_LABELS = {
+  overview: "Home",
+  analytics: "Insights",
+  history: "Activity",
+  connections: "Channels",
+  content: "Library",
+  publish: "Create a post",
+};
+const PAGES = Object.keys(PAGE_LABELS);
+
+/* The skip link must never navigate the router. It moves focus to the current
+   page's main region and leaves the hash — and therefore the current page —
+   exactly as it was. */
+function focusMainContent() {
+  const main = $("#main-content");
+  if (!main) return;
+  if (!main.hasAttribute("tabindex")) main.setAttribute("tabindex", "-1");
+  main.focus({ preventScroll: false });
+  main.scrollIntoView({ block: "start", behavior: "instant" });
+}
+
+function initSkipLink() {
+  const link = document.querySelector(".skip-link");
+  if (!link) return;
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    focusMainContent();
+  });
+}
+
+/* An unknown hash is not a page. It is replaced with the current page so a
+   stray fragment cannot silently change the view or break the back button. */
+function routeFromHash() {
+  const page = window.location.hash.slice(1);
+  return PAGES.includes(page) ? page : null;
+}
+
 function setPage(page, { recordHistory = true } = {}) {
-  if (!["overview", "analytics", "history", "connections", "content", "publish"].includes(page)) return;
+  if (!PAGES.includes(page)) return;
   const updatePage = () => {
-    if (activePage === "publish" && page !== "publish" && $("#publish-view").dataset.state !== "complete") saveLocalDraft({ announce: false });
+    if (activePage === "publish" && page !== "publish" && !publishing) {
+      saveLocalDraft({ announce: false });
+    }
     activePage = page;
     document.body.dataset.page = page;
     document.querySelectorAll("[data-page-view]").forEach((view) => {
@@ -269,28 +361,30 @@ function setPage(page, { recordHistory = true } = {}) {
       if (item.classList.contains("nav-item")) item.classList.toggle("active", selected);
       if (item.classList.contains("rail-create")) item.classList.toggle("active", selected);
       if (item.matches("a")) {
-        if (selected && (item.classList.contains("nav-item") || item.classList.contains("nav-more-link") || item.classList.contains("rail-create"))) item.setAttribute("aria-current", "page");
+        if (selected) item.setAttribute("aria-current", "page");
         else item.removeAttribute("aria-current");
       }
     });
-    const pageLabels = { overview: "Studio", analytics: "Insights", history: "Published", connections: "Channels", content: "Library", publish: "Create a post" };
-    $("#breadcrumb-label").textContent = pageLabels[page];
-    document.title = `${pageLabels[page]} · Relay`;
-    if (page === "publish") renderJourney();
+    setText("#breadcrumb-label", PAGE_LABELS[page]);
+    document.title = `${PAGE_LABELS[page]} · Relay`;
+    if (page === "publish") renderComposer();
     if (window.location.hash !== `#${page}`) {
       const update = recordHistory ? "pushState" : "replaceState";
       window.history[update]({}, "", `#${page}`);
     }
-    $("#main-content").scrollTop = 0;
     window.scrollTo({ top: 0, behavior: "instant" });
+    // Move focus for screen-reader route orientation without painting a ring.
     const heading = document.querySelector(`[data-page-view="${page}"] h1`);
     heading?.setAttribute("tabindex", "-1");
     heading?.focus({ preventScroll: true });
+    if (page === "overview") renderOverview();
     if (page === "analytics") void loadAnalytics();
     if (page === "history") void loadPostHistory();
+    if (page === "publish") void loadRecoveredAttempts();
   };
 
-  if (activePage !== page && document.startViewTransition) {
+  if (activePage !== page && document.startViewTransition &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     document.startViewTransition(updatePage);
   } else {
     updatePage();

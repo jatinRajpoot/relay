@@ -1,20 +1,41 @@
 name: Deploy to Cloud Run
 
+# A deploy is gated on the full check suite for the same commit. The checks job below
+# calls the reusable .github/workflows/checks.yml, so Python lint, Python tests and every
+# discovered Node suite must pass before the deploy job is even scheduled. This does not
+# rely on branch protection: the dependency is inside the workflow itself, and it applies
+# to manual dispatch too because dispatch runs the same jobs.
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions: {}
 
+# One production deployment at a time. Queued rather than cancelled: a half-finished
+# deploy must never be interrupted by the next push.
 concurrency:
   group: relay-production
   cancel-in-progress: false
 
 jobs:
+  checks:
+    name: Checks
+    # Reusable workflow. No secrets are passed, and the job is granted only read access,
+    # so the check phase can never reach the deploy credentials. GitHub allows only
+    # name/uses/with/secrets/strategy/needs/if/concurrency/permissions/cache-mode here.
+    permissions:
+      contents: read
+    uses: ./.github/workflows/checks.yml
+
   deploy:
     name: Deploy relay
+    needs: checks
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Deploy-only permissions: the OIDC token needed for Workload Identity Federation
+    # exists only in this job, never in the checks job.
     permissions:
       contents: read
       id-token: write

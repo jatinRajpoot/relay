@@ -11,6 +11,7 @@ def register_accounts_routes(app, context: RouteContext):
     store = context.store
     protected = context.protected
     valid_account = context.valid_account
+    account_token = context.account_token
 
     @app.get("/accounts", dependencies=protected, tags=["Accounts"])
     async def accounts(include_avatars: bool = False):
@@ -24,7 +25,7 @@ def register_accounts_routes(app, context: RouteContext):
                     avatar_url = await app.state.providers.account_avatar(
                         account["provider"],
                         account["external_id"],
-                        store.decrypt(account["access_token"]),
+                        account_token(account),
                     )
                 except HTTPException:
                     # A missing avatar should never prevent account selection.
@@ -51,7 +52,7 @@ def register_accounts_routes(app, context: RouteContext):
             }
             try:
                 account = await valid_account(account["id"], account["provider"])
-                token = store.decrypt(account["access_token"])
+                token = account_token(account)
                 if account["provider"] == "youtube":
                     item.update(
                         await app.state.providers.youtube_analytics(
@@ -103,4 +104,9 @@ def register_accounts_routes(app, context: RouteContext):
         """Remove local tokens and Instagram job records. Does not revoke provider consent."""
         if not store.delete_account(account_id):
             raise HTTPException(404, "Connected account not found.")
+        # Account ids are never reused, so the per-account refresh lock has no further use.
+        # Dropping it here (rather than on a timer) cannot race a refresh: a refresh holds
+        # this same lock object, and a later request for the deleted id fails validation
+        # before it can allocate a new one.
+        app.state.refresh_locks.pop(account_id, None)
         return Response(status_code=204)

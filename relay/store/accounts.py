@@ -1,6 +1,8 @@
 import secrets
 import time
 
+from cryptography.fernet import InvalidToken
+
 
 class AccountStore:
     def save_account(self, provider, external_id, name, tokens, scopes, avatar_url=None):
@@ -38,6 +40,18 @@ class AccountStore:
                 "SELECT * FROM accounts WHERE provider=? AND external_id=? AND workspace_id=?",
                 (provider, str(external_id), self.workspace.get()),
             ).fetchone()
+            # Reconnecting a channel is exactly the remedy a ``reconnect`` refusal
+            # asks for, so re-open those retries in the same transaction. Without
+            # this the user would have to start a new post after reconnecting, and
+            # a same-second reconnect would be indistinguishable from no reconnect.
+            db.execute(
+                """
+                UPDATE publishing_attempts
+                SET retry_kind='none', updated_at=?
+                WHERE account_id=? AND status='failed' AND retry_kind='reconnect'
+                """,
+                (now, row["id"]),
+            )
         return dict(row)
 
     def get_account(self, account_id):
@@ -88,8 +102,20 @@ class AccountStore:
                 (account_id, self.workspace.get()),
             ).rowcount > 0
 
-    @staticmethod
-    def public_account(account):
+    def public_account(self, account):
+        """Account metadata for the API. Never includes token material.
+
+        ``credentials_readable`` is additive and tells the client whether this
+        channel can actually be used. After a rotated ``TOKEN_ENCRYPTION_KEY`` or
+        a database restored under another key, the row still exists and looks
+        connected, but every send fails with "Reconnect this account". Without
+        this flag the channel list and composer would present a dead channel as
+        healthy. It reports only a boolean; the ciphertext is never returned.
+        """
+        try:
+            readable = self.decrypt(account["access_token"]) is not None
+        except InvalidToken:
+            readable = False
         return {
             key: account[key]
             for key in (
@@ -102,4 +128,7 @@ class AccountStore:
                 "created_at",
                 "avatar_url",
             )
-        } | {"has_refresh_token": bool(account["refresh_token"])}
+        } | {
+            "has_refresh_token": bool(account["refresh_token"]),
+            "credentials_readable": readable,
+        }

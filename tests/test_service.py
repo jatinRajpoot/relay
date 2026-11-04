@@ -337,6 +337,73 @@ def test_failed_publish_is_not_blindly_retried(settings):
         assert len(publish_calls) == 1
 
 
+def test_rejected_publish_is_recorded_as_failed_not_unknown(settings):
+    publish_calls = []
+
+    def handler(request):
+        if request.url.path.endswith("/media_publish"):
+            publish_calls.append(request)
+            # A 4xx is a definite rejection: the provider did not publish anything.
+            return httpx.Response(
+                400, json={"error": {"message": "Media not ready", "code": 9007}}
+            )
+        if request.url.path == "/v25.0/container-1":
+            return httpx.Response(200, json={"status_code": "FINISHED"})
+        return instagram_provider(request)
+
+    app = create_app(settings, httpx.MockTransport(handler))
+    with TestClient(app) as client:
+        account, _ = connect(client, "instagram")
+        post = app.state.store.create_post(account["id"], "container-1")
+        path = f"/instagram/posts/{post['id']}/publish"
+        assert client.post(path, headers=HEADERS).status_code == 502
+        assert app.state.store.get_post(post["id"])["status"] == "failed"
+        # A definite rejection provably published nothing, so an explicit retry is
+        # allowed and reaches the provider again (it is still rejected here). The
+        # receipt must never advertise a retry that the endpoint then refuses.
+        assert client.post(path, headers=HEADERS).status_code == 502
+        assert len(publish_calls) == 2
+
+
+def test_provider_5xx_on_publish_stays_ambiguous_and_is_not_retried(settings):
+    """A 5xx may have published; it must never be downgraded to a retryable failure."""
+    publish_calls = []
+
+    def handler(request):
+        if request.url.path.endswith("/media_publish"):
+            publish_calls.append(request)
+            return httpx.Response(503, json={"error": {"message": "upstream unavailable"}})
+        if request.url.path == "/v25.0/container-1":
+            return httpx.Response(200, json={"status_code": "FINISHED"})
+        return instagram_provider(request)
+
+    app = create_app(settings, httpx.MockTransport(handler))
+    with TestClient(app) as client:
+        account, _ = connect(client, "instagram")
+        post = app.state.store.create_post(account["id"], "container-1")
+        path = f"/instagram/posts/{post['id']}/publish"
+        assert client.post(path, headers=HEADERS).status_code == 502
+        assert app.state.store.get_post(post["id"])["status"] == "unknown"
+        # The ambiguous state blocks an automatic retry.
+        assert client.post(path, headers=HEADERS).status_code == 409
+        assert len(publish_calls) == 1
+
+
+def test_unreadable_token_keeps_a_ready_post_retryable(settings):
+    """A local decryption failure is not a publish outcome and must not consume the claim."""
+    app = create_app(settings, httpx.MockTransport(instagram_provider))
+    with TestClient(app) as client:
+        account, _ = connect(client, "instagram")
+        post = app.state.store.create_post(account["id"], "container-1")
+        with app.state.store.connection() as db:
+            db.execute("UPDATE accounts SET access_token='encrypted-with-another-key'")
+        response = client.post(f"/instagram/posts/{post['id']}/publish", headers=HEADERS)
+        assert response.status_code == 409
+        assert "Reconnect" in response.json()["detail"]
+        # The job was never claimed, so it can still be published after reconnecting.
+        assert app.state.store.get_post(post["id"])["status"] == "processing"
+
+
 def test_youtube_stream_upload_and_automatic_refresh(settings):
     def handler(request):
         if request.url.path == "/upload/youtube/v3/videos":
@@ -487,6 +554,67 @@ def test_validation_wrong_account_media_and_disconnect(settings):
         assert client.delete(f"/accounts/{account['id']}", headers=HEADERS).status_code == 204
         assert client.get("/accounts", headers=HEADERS).json() == {"accounts": []}
         assert client.post(f"/accounts/{account['id']}/refresh", headers=HEADERS).status_code == 404
+
+
+def test_unreadable_stored_token_is_isolated_to_its_own_account(settings):
+    app = create_app(settings, httpx.MockTransport(youtube_provider))
+    with TestClient(app) as client:
+        account, _ = connect(client)
+        with app.state.store.connection() as db:
+            db.execute("UPDATE accounts SET access_token='encrypted-with-another-key'")
+        # The workspace still lists its channels; only this one needs reconnecting.
+        listing = client.get("/accounts?include_avatars=true", headers=HEADERS)
+        assert listing.status_code == 200
+        assert [row["id"] for row in listing.json()["accounts"]] == [account["id"]]
+        upload = client.post(
+            "/youtube/videos",
+            headers=HEADERS,
+            data={"account_id": account["id"], "title": "Test"},
+            files={"file": ("x.mp4", b"data", "video/mp4")},
+        )
+        assert upload.status_code == 409
+        assert "Reconnect" in upload.json()["detail"]
+        analytics = client.get("/analytics", headers=HEADERS).json()["accounts"][0]
+        assert analytics["status"] == "unavailable"
+        # An unusable token is never treated as valid: it is not accepted for writes.
+        assert app.state.store.get_account(account["id"])["access_token"] != "google-access"
+
+
+def test_unreadable_token_does_not_mask_auth_errors(settings):
+    """A missing session must still be 401 even if a stored token is unreadable."""
+    app = create_app(settings, httpx.MockTransport(youtube_provider))
+    with TestClient(app) as client:
+        account, _ = connect(client)
+        with app.state.store.connection() as db:
+            db.execute("UPDATE accounts SET access_token='encrypted-with-another-key'")
+    with TestClient(app) as anonymous:
+        assert anonymous.get("/accounts").status_code == 401
+        assert anonymous.post(
+            "/youtube/videos", headers={"X-API-Key": "wrong"},
+            data={"account_id": account["id"], "title": "Test"},
+            files={"file": ("x.mp4", b"data", "video/mp4")},
+        ).status_code == 401
+        # The unreadable row is not a way to read tokens back out either.
+        assert anonymous.get("/accounts", headers={"X-API-Key": "wrong"}).status_code == 401
+
+
+def test_disconnect_drops_the_refresh_lock(settings):
+    app = create_app(settings, httpx.MockTransport(youtube_provider))
+    with TestClient(app) as client:
+        account, _ = connect(client)
+        assert client.post(f"/accounts/{account['id']}/refresh", headers=HEADERS).status_code == 200
+        assert account["id"] in app.state.refresh_locks
+        assert client.delete(f"/accounts/{account['id']}", headers=HEADERS).status_code == 204
+        assert account["id"] not in app.state.refresh_locks
+
+
+def test_unknown_account_id_does_not_leave_a_refresh_lock(settings):
+    app = create_app(settings, httpx.MockTransport(youtube_provider))
+    with TestClient(app) as client:
+        connect(client)
+        before = set(app.state.refresh_locks)
+        assert client.post("/accounts/never-existed/refresh", headers=HEADERS).status_code == 404
+        assert set(app.state.refresh_locks) == before
 
 
 def test_local_health_and_openapi(settings):

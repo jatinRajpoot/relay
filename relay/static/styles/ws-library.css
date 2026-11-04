@@ -1,0 +1,108 @@
+/* Library surface. Owns the media grid and its cards.
+   Hooks used by content.js are preserved: .media-layout, .media-main,
+   .media-grid, .media-card, .media-preview, .duration-badge, .media-details. */
+
+.media-layout,
+.media-main {
+  min-width: 0;
+}
+
+/* The library is one object (the file collection), so it keeps a single card;
+   the cards inside it are the discrete objects. */
+.media-main {
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--raised);
+}
+
+/* 3-up at desktop; the grid is the row, so it fills the width instead of
+   leaving the last third empty. */
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.media-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+/* A normalised 4:3 frame for every file, so rows line up regardless of source
+   dimensions. An empty frame is quiet paper, never a decorative gradient. */
+.media-preview {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--soft);
+  color: var(--muted);
+}
+
+.media-preview img,
+.media-preview video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.duration-badge {
+  position: absolute;
+  right: var(--space-2);
+  bottom: var(--space-2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgb(16 22 18 / 78%);
+  color: #fff;
+  font: var(--text-xs) var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.media-details {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 10px var(--space-3) var(--space-3);
+}
+
+.media-details strong {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-details small {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.media-details .button {
+  width: 100%;
+  margin-top: 6px;
+}
+
+@media (max-width: 1180px) {
+  .media-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .media-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+
+  .media-main {
+    padding: var(--space-4);
+  }
+}

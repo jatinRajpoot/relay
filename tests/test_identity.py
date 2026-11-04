@@ -90,9 +90,91 @@ def test_credentials_validation_origin_and_throttling(settings):
             })
             assert response.status_code == 401
             assert response.json()["detail"] == "Email or password is incorrect."
+        # Eight failures are recorded. The rejected duplicate signup above is *not*
+        # charged: it proves nothing about the password, and charging it would let
+        # anyone lock a known address out with ten cheap signup posts.
+        # A correct password still works and does not consume the remaining budget.
+        assert client.post("/auth/login", headers=ORIGIN, json={
+            "email": "alex@example.com", "password": PASSWORD,
+        }).status_code == 200
+        # The ninth and tenth failures are accepted; the next attempt is throttled.
+        for _ in range(2):
+            assert client.post("/auth/login", headers=ORIGIN, json={
+                "email": "alex@example.com", "password": "wrong",
+            }).status_code == 401
         assert client.post("/auth/login", headers=ORIGIN, json={
             "email": "alex@example.com", "password": PASSWORD,
         }).status_code == 429
+
+
+def test_successful_logins_never_consume_the_throttle(settings):
+    with TestClient(create_app(settings)) as client:
+        signup(client)
+        for _ in range(15):
+            assert client.post("/auth/login", headers=ORIGIN, json={
+                "email": "alex@example.com", "password": PASSWORD,
+            }).status_code == 200
+
+
+def test_stale_workspace_pin_serves_the_shell_and_falls_back_safely(settings):
+    app = create_app(settings)
+    with TestClient(app) as client:
+        state = signup(client)
+        stale = {"X-Workspace-ID": "deleted-workspace"}
+        # The HTML shell must still render instead of 404ing on a stale pin.
+        assert client.get("/", headers=stale).status_code == 200
+        assert client.get("/app", headers=stale).status_code == 200
+        redirect = client.get("/login", headers=stale, follow_redirects=False)
+        assert redirect.status_code == 303
+        assert redirect.headers["location"] == "/app"
+        # Bootstrap resolves to a workspace this user owns, never another user's.
+        current = client.get("/session", headers=stale)
+        assert current.status_code == 200
+        assert current.json()["workspace"]["id"] == state["workspace"]["id"]
+        # API routes stay strict: a pin the caller does not own is still refused.
+        assert client.get("/accounts", headers=stale).status_code == 404
+        assert client.get("/posts", headers=stale).status_code == 404
+
+
+def test_stale_pin_fallback_cannot_reach_another_users_workspace(settings):
+    app = create_app(settings, httpx.MockTransport(youtube_provider))
+    with TestClient(app) as alice, TestClient(app) as bob:
+        alice_state = signup(alice)
+        alice_workspace = alice_state["workspace"]["id"]
+        bob_state = signup(bob, "bob@example.com")
+        # Bob pins a workspace that exists but belongs to Alice: that is tampering, not a
+        # stale pin, so bootstrap refuses it instead of silently swapping in his own.
+        response = bob.get("/session", headers={"X-Workspace-ID": alice_workspace})
+        assert response.status_code == 404
+        assert bob_state["workspace"]["id"] != alice_workspace
+        # Without the pin, Bob resolves to his own workspace normally.
+        assert bob.get("/session").json()["workspace"]["id"] == bob_state["workspace"]["id"]
+        # And the strict API path still refuses it outright.
+        assert bob.get("/accounts", headers={"X-Workspace-ID": alice_workspace}).status_code == 404
+        # Selecting a workspace he does not own is rejected, so it can never be persisted.
+        assert bob.post(
+            f"/workspaces/{alice_workspace}/select", headers=ORIGIN
+        ).status_code == 404
+
+
+def test_signed_in_user_with_no_workspace_is_sent_back_to_sign_in(settings):
+    """Defensive: an orphaned session (e.g. a restored/partial database) must not 404."""
+    app = create_app(settings)
+    with TestClient(app) as client:
+        signup(client)
+        with app.state.store.connection() as db:
+            # Simulate a database restored without its workspaces. Foreign keys are
+            # disabled only to create that inconsistent state for the test.
+            db.execute("PRAGMA foreign_keys=OFF")
+            db.execute("DELETE FROM workspaces")
+        # The shell and bootstrap must not 404; they report no usable session.
+        assert client.get("/app", follow_redirects=False).status_code == 303
+        assert client.get("/app", follow_redirects=False).headers["location"] == "/login"
+        current = client.get("/session")
+        assert current.status_code == 200
+        assert current.json()["authenticated"] is False
+        assert current.json()["workspace"] is None
+        assert client.get("/login", follow_redirects=False).status_code == 200
 
 
 def test_users_workspaces_and_every_resource_are_isolated(settings):
@@ -186,6 +268,85 @@ def test_legacy_database_migration_preserves_connections_and_foreign_keys(settin
         assert list(db.execute("PRAGMA foreign_key_check")) == []
     assert store.delete_account("old")
     assert store.get_post("job") is None
+
+
+def test_post_history_is_keyed_by_account(settings):
+    store = Store(settings.database_path, settings.encryption_key)
+    tokens = {"access_token": "token", "expires_in": 3600}
+    first = store.save_account("youtube", "channel", "First", tokens, "scope")
+    scope = store.workspace.set("studio")
+    try:
+        second = store.save_account("youtube", "channel", "Second", tokens, "scope")
+    finally:
+        store.workspace.reset(scope)
+    store.save_youtube_history(
+        first["id"], "video-1", "First upload", "", "a.mp4", "video/mp4", None,
+        "https://youtu.be/video-1", "private",
+    )
+    store.save_youtube_history(
+        second["id"], "video-1", "Second upload", "", "b.mp4", "video/mp4", None,
+        "https://youtu.be/video-1", "private",
+    )
+    # Each workspace sees only its own channel's receipt for the same platform id.
+    assert [row["title"] for row in store.list_post_history()] == ["First upload"]
+    scope = store.workspace.set("studio")
+    try:
+        assert [row["title"] for row in store.list_post_history()] == ["Second upload"]
+    finally:
+        store.workspace.reset(scope)
+
+
+def test_legacy_post_history_key_is_migrated_without_losing_rows(settings):
+    # Build a database the way older releases shipped it: history keyed by platform post.
+    with sqlite3.connect(settings.database_path) as db:
+        db.executescript("""
+            CREATE TABLE accounts (
+                id TEXT PRIMARY KEY, provider TEXT NOT NULL, external_id TEXT NOT NULL,
+                name TEXT NOT NULL, access_token TEXT NOT NULL, refresh_token TEXT,
+                expires_at INTEGER NOT NULL, scopes TEXT NOT NULL,
+                token_updated_at INTEGER NOT NULL, created_at INTEGER NOT NULL,
+                avatar_url TEXT, workspace_id TEXT NOT NULL DEFAULT 'legacy',
+                UNIQUE(workspace_id, provider, external_id)
+            );
+            INSERT INTO accounts VALUES ('acct', 'youtube', 'remote', 'Channel',
+                'encrypted', NULL, 9999999999, 'scope', 1, 1, NULL, 'legacy');
+            CREATE TABLE post_history (
+                id TEXT PRIMARY KEY,
+                provider TEXT NOT NULL CHECK(provider IN ('youtube', 'instagram')),
+                account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                platform_post_id TEXT NOT NULL,
+                title TEXT, caption TEXT NOT NULL DEFAULT '',
+                media_name TEXT, media_type TEXT, media_url TEXT,
+                post_url TEXT, visibility TEXT,
+                published_at INTEGER NOT NULL,
+                UNIQUE(provider, platform_post_id)
+            );
+            INSERT INTO post_history VALUES ('youtube-video-1', 'youtube', 'acct', 'video-1',
+                'Existing upload', 'desc', 'a.mp4', 'video/mp4', NULL,
+                'https://youtu.be/video-1', 'private', 100);
+            INSERT INTO post_history VALUES ('instagram-media-1', 'instagram', 'acct', 'media-1',
+                NULL, 'caption', NULL, 'IMAGE', NULL, NULL, NULL, 200);
+        """)
+    migrated = Store(settings.database_path, settings.encryption_key)
+    rows = migrated.list_post_history()
+    assert {row["id"] for row in rows} == {"youtube-video-1", "instagram-media-1"}
+    with migrated.connection() as db:
+        assert list(db.execute("PRAGMA foreign_key_check")) == []
+        keys = {
+            tuple(row[2] for row in db.execute(f'PRAGMA index_info("{index[1]}")'))
+            for index in db.execute("PRAGMA index_list(post_history)").fetchall()
+            if index[2]
+        }
+        assert ("provider", "account_id", "platform_post_id") in keys
+        assert ("provider", "platform_post_id") not in keys
+    # Re-opening an already-migrated database must be a no-op, not a second rebuild.
+    again = Store(settings.database_path, settings.encryption_key)
+    assert {row["id"] for row in again.list_post_history()} == {
+        "youtube-video-1", "instagram-media-1",
+    }
+    # Deleting the account still cascades its history after the rebuild.
+    assert again.delete_account("acct")
+    assert again.list_post_history() == []
 
 
 def test_account_sessions_and_workspaces_survive_restart(settings):

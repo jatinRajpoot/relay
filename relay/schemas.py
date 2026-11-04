@@ -6,11 +6,27 @@ from pydantic import BaseModel, Field, HttpUrl, field_validator
 Provider = Literal["youtube", "instagram"]
 
 
+IDEMPOTENCY_PATTERN = r"^[A-Za-z0-9._:-]{8,128}$"
+
+
+def normalize_idempotency_key(value):
+    """Accept a client-supplied stable key, or ``None`` for legacy compatibility."""
+    if value is None:
+        return None
+    value = value.strip()
+    if not re.fullmatch(IDEMPOTENCY_PATTERN[1:-1], value):
+        raise ValueError(
+            "Idempotency-Key must be 8-128 characters of letters, digits, '.', '_', ':' or '-'."
+        )
+    return value
+
+
 class InstagramPost(BaseModel):
     account_id: str = Field(min_length=1, max_length=64)
     media_type: Literal["IMAGE", "REELS"]
     media_url: HttpUrl
     caption: str = Field(default="", max_length=2200)
+    idempotency_key: str | None = Field(default=None, max_length=128)
 
     @field_validator("media_url")
     @classmethod
@@ -18,6 +34,22 @@ class InstagramPost(BaseModel):
         if value.scheme != "https" or value.username or value.password or value.fragment:
             raise ValueError("Use a publicly accessible HTTPS media URL without credentials.")
         return value
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def valid_idempotency_key(cls, value):
+        return normalize_idempotency_key(value)
+
+
+class PublishRequest(BaseModel):
+    """Optional body for an explicit Instagram publish confirmation."""
+
+    idempotency_key: str | None = Field(default=None, max_length=128)
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def valid_idempotency_key(cls, value):
+        return normalize_idempotency_key(value)
 
 
 class UnlockRequest(BaseModel):

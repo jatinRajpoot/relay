@@ -51,8 +51,8 @@
     justify-content: space-around;
     gap: 2px;
     padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
-    background: color-mix(in srgb, var(--bg-soft) 94%, transparent);
-    backdrop-filter: blur(14px);
+    background: var(--bg-soft);
+    box-shadow: 0 -8px 20px rgb(20 28 23 / 8%);
     border-top: 1px solid var(--line);
   }
   .mobile-nav .nav-item {

@@ -1,149 +1,94 @@
-async function api(path, options = {}) {
-  let response;
-  try {
-    const headers = new Headers(options.headers);
-    if (activeWorkspaceId) headers.set("X-Workspace-ID", activeWorkspaceId);
-    const method = String(options.method || "GET").toUpperCase();
-    const signal = options.signal || (method === "GET" && AbortSignal.timeout ? AbortSignal.timeout(30_000) : undefined);
-    response = await fetch(path, { credentials: "same-origin", ...options, headers, signal });
-  } catch (cause) {
-    const hasDraft = activePage === "publish" && typeof saveLocalDraft === "function";
-    const draftSaved = hasDraft && saveLocalDraft({ announce: false });
-    const recovery = draftSaved ? "Your draft is saved in this browser." : hasDraft ? "Your input is still in this window." : "Try again when the connection is back.";
-    const message = cause?.name === "TimeoutError"
-      ? `Relay took too long to respond. ${recovery}`
-      : `Couldn't reach Relay. ${recovery}`;
-    const error = new Error(message);
-    error.network = true;
-    throw error;
-  }
-  const data = response.status === 204 ? null : await response.json();
-  if (!response.ok) {
-    if (response.status === 401) {
-      saveLocalDraft({ announce: false });
-      showSessionRecovery();
-    }
-    const error = new Error(typeof data?.detail === "string" ? data.detail : "Relay couldn't finish that request. Try again in a moment.");
-    error.status = response.status;
-    throw error;
-  }
-  return data;
+"use strict";
+
+// Feature scripts are loaded in order by index.html and share this page state.
+const $ = (selector) => document.querySelector(selector);
+const names = { instagram: "Instagram", youtube: "YouTube" };
+let authenticated = false;
+let accountList = [];
+let contentItems = [];
+let activeWorkspaceId = null;
+let activeUserId = null;
+let disconnecting = null;
+let instagramMediaConfigured = false;
+let contentStorageConfigured = false;
+let localMediaStorage = false;
+let maxUploadBytes = 0;
+let activeInstagramPosts = [];
+let youtubeUploadResults = [];
+let instagramStatusTimer = null;
+let instagramStatusCheckRunning = false;
+let analyticsData = null;
+let analyticsLoading = false;
+let analyticsError = null;
+let analyticsRequestId = 0;
+let postHistory = [];
+let historyLoading = false;
+let historyLoaded = false;
+let historyError = null;
+let historyRequestId = 0;
+let analyticsDays = 30;
+let selectedContentId = null;
+let selectedAccountIds = new Set();
+let activePreviewPlatform = "instagram";
+let historyFilter = "all";
+let publishing = false;
+let activePage = "overview";
+const providerConfigured = { instagram: true, youtube: true };
+const providerIssues = { instagram: null, youtube: null };
+
+/* `activeSubmission`, `recoveredAttempts`, and `activityAttempts` live in
+   publishing.js and history.js next to the code that owns them. */
+
+function resetConnectButtons() {
+  document.querySelectorAll("[data-connect]").forEach((button) => {
+    const provider = button.dataset.connect;
+    button.disabled = !providerConfigured[provider];
+    button.querySelector("span").textContent = providerConfigured[provider]
+      ? `Connect ${names[provider]}` : "Setup needed";
+  });
 }
 
-function icon(name) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", "icon");
-  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-  use.setAttribute("href", `#i-${name}`);
-  svg.append(use);
-  return svg;
+/* ── Shared small helpers ─────────────────────────────────── */
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
 }
 
-function dismissToast(toast) {
-  if (toast.dataset.leaving) return;
-  toast.dataset.leaving = "true";
-  toast.classList.add("leaving");
-  window.setTimeout(() => toast.remove(), 200);
+function setText(selector, value) {
+  const node = $(selector);
+  if (node) node.textContent = value;
 }
 
-function notice(message, error = false, action = null) {
-  const stack = $("#toasts");
-  if (!stack) return;
-  const toast = document.createElement("div");
-  toast.className = `toast${error ? " error" : ""}`;
-  toast.append(icon(error ? "alert" : "check"));
-  toast.querySelector(".icon").classList.add("toast-icon");
-  const text = document.createElement("span");
-  text.className = "toast-text";
-  text.textContent = message;
-  toast.append(text);
-  if (action) {
-    const run = document.createElement("button");
-    run.type = "button";
-    run.className = "toast-action";
-    run.textContent = action.label;
-    run.addEventListener("click", () => {
-      action.run();
-      dismissToast(toast);
-    });
-    toast.append(run);
-  }
-  const close = document.createElement("button");
-  close.type = "button";
-  close.className = "toast-close";
-  close.setAttribute("aria-label", "Dismiss notification");
-  close.textContent = "×";
-  close.addEventListener("click", () => dismissToast(toast));
-  toast.append(close);
-  stack.append(toast);
-  while (stack.children.length > 3) stack.firstElementChild.remove();
-  const timer = window.setTimeout(() => dismissToast(toast), error ? 9000 : 5500);
-  toast.addEventListener("mouseenter", () => window.clearTimeout(timer), { once: true });
+function toggleHidden(selector, hidden) {
+  const node = $(selector);
+  if (node) node.hidden = hidden;
 }
 
-function renderSession() {
-  const button = $("#session-button");
-  button.classList.remove("unlocked");
-  button.setAttribute("aria-label", authenticated ? "Lock workspace" : "Unlock workspace");
-  button.title = authenticated ? "Lock workspace" : "Unlock workspace";
-  button.querySelector("span").textContent = authenticated ? "Lock workspace" : "Unlock workspace";
-  button.querySelector("use").setAttribute("href", authenticated ? "#i-lock" : "#i-unlock");
-  $("#empty-connect").textContent = authenticated ? "Connect a channel" : "Unlock workspace";
-  if (!authenticated) {
-    if (instagramStatusTimer !== null) window.clearTimeout(instagramStatusTimer);
-    instagramStatusTimer = null;
-    accountList = [];
-    contentItems = [];
-    selectedAccountIds.clear();
-    selectedContentId = null;
-    activeInstagramPosts = [];
-    youtubeUploadResults = [];
-    analyticsData = null;
-    analyticsLoading = false;
-    analyticsError = null;
-    analyticsRequestId += 1;
-    postHistory = [];
-    historyLoading = false;
-    historyLoaded = false;
-    historyError = null;
-    historyRequestId += 1;
-    publishing = false;
-    $("#accounts-list").replaceChildren();
-    $("#accounts-list").hidden = true;
-    $("#empty-state").hidden = false;
-    $("#publish-results-section").hidden = true;
-    $("#account-count").textContent = "—";
-    $("#nav-count").textContent = "—";
-    for (const provider of Object.keys(names)) {
-      $(`#${provider}-state`).textContent = providerIssues[provider] ? "Setup needed" : "Ready to connect";
-      $(`#${provider}-state`).classList.remove("connected");
-    }
-  }
-  renderContent();
-  renderComposer();
-  renderWorkspaceFlow();
-  renderAnalytics();
-  renderPostHistory();
-}
+/* Dialogs: return focus to the control that opened them. */
+const dialogReturnFocus = new WeakMap();
 
-function renderWorkspaceFlow() {
-  const button = $("#overview-primary-action");
-  if (!button) return;
+document.addEventListener("click", (event) => {
+  const opener = event.target instanceof Element ? event.target.closest("[data-close]") : null;
+  if (!opener) return;
+  const dialog = document.getElementById(opener.dataset.close);
+  if (dialog && dialog.open) dialog.close();
+});
 
-  let label = "Create a post";
-  let destination = "publish";
-  let symbol = "plus";
-  if (!authenticated) {
-    label = "Unlock workspace";
-    destination = "unlock";
-    symbol = "unlock";
-  } else if (readLocalDraft()) {
-    label = "Continue your draft";
-    symbol = "arrow";
-  }
-  button.querySelector("span").textContent = label;
-  button.querySelector("use").setAttribute("href", `#i-${symbol}`);
-  button.dataset.nextAction = destination;
-  renderOverview();
-  renderJourney();
+document.querySelectorAll("dialog").forEach((dialog) => {
+  dialog.addEventListener("close", () => {
+    const previous = dialogReturnFocus.get(dialog);
+    if (previous && document.contains(previous) && !previous.disabled) previous.focus();
+    dialogReturnFocus.delete(dialog);
+  });
+});
+
+function openDialog(dialog, opener) {
+  if (!dialog || dialog.open) return;
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && active !== document.body) dialogReturnFocus.set(dialog, active);
+  else if (opener instanceof HTMLElement) dialogReturnFocus.set(dialog, opener);
+  dialog.showModal();
 }

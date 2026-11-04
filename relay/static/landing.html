@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,47 +8,82 @@
   <title>Relay — Make room for the work</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/account.css">
-  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/theme-init.js"></script>
 </head>
 <body class="public-page">
   <a class="skip-link" href="#main-content">Skip to main content</a>
+
   <header class="public-nav">
-    <a class="brand" href="/" aria-label="Relay home"><span class="brand-mark"><i></i><i></i><i></i></span><span class="brand-name">relay<span>.</span></span></a>
+    <a class="brand" href="/" aria-label="Relay home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="brand-name">relay<span>.</span></span>
+    </a>
     <nav aria-label="Main navigation">
       <a href="/login">Log in</a>
     </nav>
   </header>
+
   <main id="main-content">
     <section class="landing-hero" aria-labelledby="hero-title">
       <div class="hero-copy">
+        <p class="eyebrow">Publishing studio</p>
         <h1 id="hero-title">Make room<br>for the <em>work.</em></h1>
-        <p class="hero-description">Publish to Instagram and YouTube from one workspace.</p>
+        <p class="hero-description">Write a post once, then send it to Instagram and YouTube from one workspace — with the media, drafts, and delivery history beside it.</p>
         <div class="hero-actions">
           <a class="button button-primary" href="/try">Try the studio</a>
-          <a class="text-button" href="/signup">Create an account</a>
+          <a class="button button-ghost" href="/signup">Create an account</a>
         </div>
+        <p class="hero-note">The preview needs no account. Nothing is published until you confirm.</p>
       </div>
-      <div class="studio-visual" aria-label="Preview of the Relay publishing workspace">
-        <div class="studio-top"><span class="studio-dots">● ● ●</span><span>Relay / studio</span><span>Workspace 01</span></div>
-        <div class="studio-window">
-          <aside class="mock-sidebar" aria-hidden="true">
-            <div class="mock-logo"><span class="mock-logo-mark">r</span>relay</div>
-            <div class="mock-nav"><span class="active">◷ &nbsp; Studio</span><span>▧ &nbsp; Library</span><span>⌁ &nbsp; Channels</span><span class="mock-nav-sep">PUBLISHING</span><span>Insights</span><span>◴ &nbsp; Published</span></div>
-          </aside>
-          <div class="mock-main" aria-hidden="true">
-            <h2>Work in motion.</h2>
-            <div class="mock-stats"><span>Channels<strong>03</strong></span><span>Media<strong>18</strong></span><span>Published<strong>42</strong></span></div>
-            <div class="mock-board">
-              <section class="mock-panel"><h3>Recently published</h3>
-                <div class="mock-post"><span class="mock-thumb"></span><span class="mock-post-copy"><strong>Field notes — spring cut</strong><small>Instagram · yesterday</small></span><span class="mock-status">LIVE</span></div>
-                <div class="mock-post"><span class="mock-thumb second"></span><span class="mock-post-copy"><strong>A slower kind of Sunday</strong><small>YouTube · Oct 16</small></span><span class="mock-status">LIVE</span></div>
-              </section>
-            </div>
-          </div>
+
+      <figure class="studio-sheet" aria-labelledby="sheet-caption">
+        <div class="sheet-head">
+          <span class="sheet-kicker">Create post</span>
+          <span class="sheet-state">Draft</span>
         </div>
-      </div>
+        <p class="sheet-caption">Field notes from the spring cut — a slower edit, and the light we waited all morning for.</p>
+        <div class="sheet-media" aria-hidden="true"><span class="sheet-media-label">Media</span></div>
+        <ul class="sheet-channels">
+          <li><span class="sheet-index" aria-hidden="true">01</span>Instagram</li>
+          <li><span class="sheet-index" aria-hidden="true">02</span>YouTube</li>
+        </ul>
+        <div class="sheet-foot">
+          <span>1 caption · 2 channels</span>
+          <span>Nothing sends until you confirm.</span>
+        </div>
+        <figcaption id="sheet-caption">A post taking shape in Relay. One caption, two destinations.</figcaption>
+      </figure>
+    </section>
+
+    <section class="landing-facts" aria-labelledby="facts-title">
+      <h2 id="facts-title" class="visually-hidden">What Relay does</h2>
+      <ol class="fact-list">
+        <li>
+          <span class="fact-number">01</span>
+          <h3>One workspace</h3>
+          <p>Channels, media, drafts, and delivery history stay together, per project.</p>
+        </li>
+        <li>
+          <span class="fact-number">02</span>
+          <h3>Two destinations</h3>
+          <p>Instagram and YouTube are tracked separately, so a partial send is never reported as a full one.</p>
+        </li>
+        <li>
+          <span class="fact-number">03</span>
+          <h3>Confirmed delivery</h3>
+          <p>A post reads published only after the provider confirms it. Until then, Relay says so.</p>
+        </li>
+      </ol>
     </section>
   </main>
-  <footer class="public-footer"><a class="brand-name" href="/">relay<span>.</span></a></footer>
+
+  <footer class="public-footer">
+    <a class="brand" href="/" aria-label="Relay home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="brand-name">relay<span>.</span></span>
+    </a>
+    <p>A publishing studio for Instagram and YouTube.</p>
+    <a href="/signup">Create an account</a>
+  </footer>
 </body>
 </html>
