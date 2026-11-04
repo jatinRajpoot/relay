@@ -36,6 +36,9 @@ def cloud_store(settings, monkeypatch):
             "blob": lambda self, name: blob,
         })(),
     })())
+    # A cloud database is never created implicitly: first boot is the explicit,
+    # one-shot initialization. Later stores in these tests reuse the snapshot.
+    assert Store.initialize_cloud_snapshot(settings.database_path, settings.encryption_key)
     return Store(settings.database_path, settings.encryption_key), blob
 
 

@@ -1,2 +1,9 @@
-@import url("/static/styles/studio.css");
-@import url("/static/styles/ux-refinement.css");
+/* tokens -> base -> shell -> screens. Order is fixed. */
+@import url("styles/tokens.css");
+@import url("styles/base.css");
+@import url("styles/workspace.css");
+@import url("styles/ws-composer.css");
+@import url("styles/ws-library.css");
+@import url("styles/ws-channels.css");
+@import url("styles/ws-activity.css");
+@import url("styles/ws-insights.css");

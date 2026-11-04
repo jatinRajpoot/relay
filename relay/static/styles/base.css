@@ -1,34 +1,102 @@
-/* ── 2. Base ───────────────────────────────────────────────── */
-* { box-sizing: border-box; }
+/* Relay base layer — reset, typography, focus, and shared primitives.
+   Loaded by the workspace (styles.css) and by public pages (account.css), so
+   everything here must stand on its own without workspace layout rules.
 
-html { -webkit-text-size-adjust: 100%; }
+   Contract for area sheets (ws-*.css):
+     - Use the tokens in tokens.css; do not introduce raw colours or ad-hoc sizes.
+     - Use .button*, .field*, .card, .status-*, .empty-state, .message-block,
+       dialog, and .toast instead of restyling those primitives locally.
+     - Structure comes from hairlines and space, not from new boxes or shadows. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+  background: var(--paper);
+  -webkit-text-size-adjust: 100%;
+}
 
 body {
-  margin: 0;
+  min-width: 320px;
   min-height: 100vh;
-  background: var(--bg);
-  color: var(--text);
-  font: 400 14px/1.5 var(--font);
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: var(--text-base)/1.55 var(--sans);
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, h4 { margin: 0; font-weight: 620; letter-spacing: -0.015em; }
-p { margin: 0; }
-a { color: inherit; text-decoration: none; }
-button, input, select, textarea { font: inherit; color: inherit; }
-button { cursor: pointer; background: none; border: 0; }
-button:disabled { cursor: not-allowed; opacity: 0.45; }
-svg { display: block; }
+h1, h2, h3, h4, p, figure {
+  margin: 0;
+}
 
+/* In-app headings never exceed 600, and tracking never goes below -0.03em. */
+h1, h2, h3, h4 {
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -.015em;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img, svg, video {
+  max-width: 100%;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* Focus: visible for keyboard users, invisible for programmatic heading focus. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
   outline-offset: 2px;
-  border-radius: 4px;
+}
+
+h1[tabindex="-1"]:focus,
+h1[tabindex="-1"]:focus-visible,
+[tabindex="-1"]:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.icon-library {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }
 
 .icon {
-  width: 17px; height: 17px;
-  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  flex: none;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.7;
@@ -36,52 +104,682 @@ svg { display: block; }
   stroke-linejoin: round;
 }
 
-.icon-library { position: absolute; width: 0; height: 0; overflow: hidden; }
-[hidden] { display: none !important; }
-
 .visually-hidden {
   position: absolute !important;
-  width: 1px; height: 1px;
-  margin: -1px; padding: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 
 .skip-link {
-  position: absolute; left: 12px; top: -60px; z-index: 100;
-  padding: 10px 16px;
+  position: fixed;
+  z-index: 1000;
+  top: var(--space-3);
+  left: var(--space-3);
+  transform: translateY(-160%);
+  padding: 10px 14px;
   border-radius: var(--radius-sm);
-  background: var(--surface-3); color: var(--text);
+  background: var(--ink);
+  color: var(--raised);
   font-weight: 600;
-  transition: top 0.15s var(--ease);
 }
-.skip-link:focus { top: 12px; }
 
-kbd {
-  font: 500 10.5px/1 var(--mono);
-  padding: 4px 5px;
-  border-radius: 5px;
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  transition: background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+/* A disabled primary action stays legible: the reason is visible beside it, so
+   fading the only action on the page to 50% would hide the way forward. */
+.button:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  background: var(--soft);
+  border-color: var(--line-strong);
+  color: var(--ink-soft);
+}
+
+.button .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.button-primary {
+  background: var(--accent);
+  /* Theme-aware: the dark accent is light coral, so it takes dark ink. */
+  color: var(--accent-on);
+}
+
+.button-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.button-secondary {
+  border-color: var(--line-strong);
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.button-secondary:hover:not(:disabled) {
+  border-color: var(--ink-soft);
+  background: var(--soft);
+}
+
+.button-ghost {
+  border-color: var(--line-strong);
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.button-ghost:hover:not(:disabled) {
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.button-quiet {
+  color: var(--muted);
+}
+
+.button-quiet:hover:not(:disabled) {
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.button-danger {
+  background: var(--danger);
+  color: var(--danger-on);
+}
+
+.button-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 85%, black);
+}
+
+.button-primary:disabled {
+  background: var(--soft);
+  border-color: var(--line-strong);
+  color: var(--ink-soft);
+}
+
+.button-secondary:disabled,
+.button-ghost:disabled,
+.button-quiet:disabled {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.button-sm {
+  min-height: 36px;
+  padding-inline: var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.button-block {
+  width: 100%;
+}
+
+.text-button {
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: left;
+}
+
+.text-button:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.icon-button {
+  width: 44px;
+  height: 44px;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+}
+
+.icon-button:hover {
+  border-color: var(--line);
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.icon-button-sm {
+  width: 44px;
+  height: 44px;
+}
+
+.icon-button .icon {
+  width: 17px;
+  height: 17px;
+}
+
+/* ── Form controls ───────────────────────────────────────── */
+label {
+  display: block;
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* 16px on controls is deliberate: anything smaller makes iOS zoom on focus. */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 16px;
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+input::placeholder,
+textarea::placeholder {
   color: var(--faint);
-  background: var(--surface-3);
+  opacity: 1;
+}
+
+input[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.field {
+  min-width: 0;
+}
+
+.field > label,
+.field > .field-label {
+  margin-bottom: 6px;
+}
+
+.field-hint,
+.field-meta {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.field-hint[hidden] {
+  display: none !important;
+}
+
+#youtube-title-hint {
+  color: var(--muted);
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.field-wide {
+  grid-column: 1 / -1;
+}
+
+.switch-row {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 500;
+}
+
+.switch-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.form-error {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+.inline-status {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* ── Surfaces ────────────────────────────────────────────── */
+/* A card is for a genuinely discrete object. Regions are separated by a
+   hairline and space instead; never wrap a whole page section in one. */
+.card {
+  min-width: 0;
+  padding: var(--space-5);
   border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--raised);
 }
 
-code {
-  font: 500 0.92em/1.4 var(--mono);
-  padding: 1px 5px;
-  border-radius: 5px;
-  background: var(--surface-3);
-  color: var(--text-2);
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
 }
 
-::selection { background: var(--accent-soft); color: var(--text); }
+.card-head h2,
+.card h2 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -.015em;
+}
 
-* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
-*::-webkit-scrollbar { width: 10px; height: 10px; }
-*::-webkit-scrollbar-thumb {
-  background: var(--line-strong);
-  border: 3px solid var(--bg);
-  border-radius: 99px;
+.card-head p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.card-head-flush {
+  margin-bottom: var(--space-4);
+}
+
+.count-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--paper);
+  color: var(--muted);
+  font: var(--text-xs) var(--mono);
+  font-variant-numeric: tabular-nums;
+  vertical-align: 2px;
+}
+
+.footnote {
+  max-width: 720px;
+  margin-top: var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* ── Empty, loading, error blocks ────────────────────────── */
+.empty-state,
+.message-block,
+.empty-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.empty-state {
+  flex-direction: column;
+  justify-content: center;
+  min-height: 220px;
+  text-align: center;
+}
+
+/* Inside an existing card the dashed frame would double the container. */
+.empty-state-flat {
+  border: 0;
+  background: transparent;
+}
+
+.empty-state h3 {
+  font: 400 var(--text-xl)/1.2 var(--serif);
+  letter-spacing: -.02em;
+}
+
+.empty-state p {
+  max-width: 420px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.empty-state > .button {
+  margin-top: var(--space-1);
+}
+
+.empty-inline > div,
+.message-block > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.empty-inline strong,
+.message-block strong {
+  display: block;
+  font-size: var(--text-base);
+}
+
+.empty-inline p,
+.message-block p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.empty-inline-icon,
+.empty-state-icon,
+.message-icon,
+.dialog-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.empty-state-icon {
+  width: 48px;
+  height: 48px;
+}
+
+.message-block {
+  margin-bottom: var(--space-4);
+}
+
+.message-error {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.message-error > span {
+  flex: 1;
+  color: var(--ink);
+  font-size: var(--text-sm);
+}
+
+.spinner {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Status vocabulary ───────────────────────────────────── */
+/* Dot + label, never a filled pill: status reads as an instrument reading and
+   is never carried by colour alone (the label is always present). */
+.status-badge,
+.result-status-badge,
+.history-status,
+.account-status,
+.overview-channel-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-badge::before,
+.result-status-badge::before,
+.history-status::before,
+.account-status::before,
+.overview-channel-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Connected / published. `.account-status` has no positive class today, so the
+   absence of `.expired` is the connected state — the same rule Home already uses. */
+.status-badge.published,
+.result-status-badge.published,
+.history-status.published,
+.account-status:not(.expired),
+.overview-channel-status:not(.expired) {
+  color: var(--success);
+}
+
+.status-badge.failed,
+.status-badge.expired,
+.result-status-badge.failed,
+.result-status-badge.expired,
+.history-status.failed,
+.history-status.expired,
+.account-status.expired,
+.overview-channel-status.expired {
+  color: var(--danger);
+}
+
+.status-badge.unknown,
+.status-badge.ready,
+.status-badge.processing,
+.status-badge.publishing,
+.result-status-badge.pending,
+.result-status-badge.submitted,
+.result-status-badge.unknown,
+.result-status-badge.ready,
+.result-status-badge.processing,
+.result-status-badge.publishing,
+.history-status.unverified,
+.history-status.action_needed,
+.history-status.in_progress {
+  color: var(--warning);
+}
+
+/* A draft is not a delivery state: it is neutral, not in progress. */
+.history-status.draft {
+  color: var(--ink-soft);
+}
+
+/* ── Dialogs ─────────────────────────────────────────────── */
+dialog {
+  width: min(540px, calc(100vw - 28px));
+  max-height: min(88vh, 900px);
+  overflow: auto;
+  padding: var(--space-5);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--raised);
+  color: var(--ink);
+  box-shadow: 0 30px 100px rgb(0 0 0 / 35%);
+}
+
+dialog::backdrop {
+  background: rgb(16 22 18 / 62%);
+  backdrop-filter: blur(3px);
+}
+
+.dialog-wide {
+  width: min(720px, calc(100vw - 28px));
+}
+
+.dialog-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.dialog h2 {
+  font: 400 var(--text-xl)/1.2 var(--serif);
+  letter-spacing: -.02em;
+}
+
+.dialog > p {
+  margin-top: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.dialog form {
+  margin-top: var(--space-4);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+.dialog-icon-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* ── Toasts ──────────────────────────────────────────────── */
+.toasts {
+  position: fixed;
+  z-index: 60;
+  right: 20px;
+  bottom: var(--space-5);
+  display: grid;
+  gap: var(--space-2);
+  width: min(400px, calc(100vw - 32px));
+  max-width: min(420px, calc(100vw - 32px));
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--raised);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  animation: toast-in var(--dur) var(--ease-out) both;
+}
+
+.toast.leaving {
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.toast.error {
+  border-color: var(--danger);
+}
+
+.toast-icon {
+  width: 17px;
+  height: 17px;
+  color: var(--success);
+}
+
+.toast.error .toast-icon {
+  color: var(--danger);
+}
+
+.toast-text {
+  flex: 1;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.toast-action,
+.toast-close {
+  min-height: 36px;
+  min-width: 36px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.toast-close {
+  color: var(--muted);
+  font-size: 18px;
+}
+
+.toast-action:focus-visible,
+.toast-close:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.noscript {
+  position: fixed;
+  z-index: 300;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 12px;
+  background: var(--danger);
+  color: var(--danger-on);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
 }

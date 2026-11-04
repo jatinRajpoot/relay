@@ -1,11 +1,75 @@
 <!doctype html>
-<html lang="en" data-theme="light">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Try the studio · Relay</title><link rel="icon" href="/static/favicon.svg"><link rel="stylesheet" href="/static/styles.css"><link rel="stylesheet" href="/static/account.css"><link rel="stylesheet" href="/static/styles/journey.css"></head>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f0e7">
+  <meta name="description" content="Write a caption and see how it reads before creating a Relay account. Nothing is published.">
+  <title>Try the studio · Relay</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/account.css">
+  <link rel="stylesheet" href="/static/styles/journey.css">
+  <script src="/static/theme-init.js"></script>
+  <script src="/static/try.js" defer></script>
+</head>
 <body class="public-page preview-page">
-<a class="skip-link" href="#main-content">Skip to editor</a>
-<header class="public-nav"><a class="text-button" href="/">← Relay</a><span class="connection-status">Preview · no account needed</span></header>
-<main id="main-content"><div class="page-intro"><h1>Make your next post.</h1></div>
-<div class="preview-workspace"><section class="card"><span class="journey-eyebrow">01 / MAKE IT YOURS</span><h2>Start with a few words.</h2><label for="preview-caption">Caption</label><textarea id="preview-caption" rows="7" maxlength="2200" placeholder="What have you been working on?"></textarea><small id="preview-save" role="status">Your caption stays in this browser.</small><p id="preview-error" role="alert" hidden></p></section>
-<section class="card preview-receipt" aria-label="Live post preview"><span class="journey-eyebrow">02 / SEE IT TAKE SHAPE</span><h2>Your post, in focus.</h2><div class="preview-paper"><span class="preview-avatar">r.</span><strong>Your channel</strong><p id="preview-copy">Your words will appear here.</p></div></section></div>
-<div class="preview-actions"><span>Keep this caption when you join.</span><a href="/signup" class="button button-primary">Create account to publish →</a></div>
-</main><script src="/static/try.js"></script></body></html>
+  <a class="skip-link" href="#main-content">Skip to the editor</a>
+
+  <header class="public-nav">
+    <a class="brand" href="/" aria-label="Relay home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="brand-name">relay<span>.</span></span>
+    </a>
+    <nav aria-label="Preview navigation">
+      <span class="preview-marker">Preview</span>
+      <a href="/login">Log in</a>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    <div class="preview-intro">
+      <p class="eyebrow">Two steps, nothing sent</p>
+      <h1>Make your next post.</h1>
+      <p>No account needed. Write a caption, then read it back the way it will appear. It stays in this browser until you create an account.</p>
+    </div>
+
+    <div class="preview-workspace">
+      <section class="card preview-step" aria-labelledby="step-write">
+        <div class="preview-step-head">
+          <span class="step-number" aria-hidden="true">01</span>
+          <div>
+            <h2 id="step-write">Write the caption</h2>
+            <p>Plain text. Instagram allows 2,200 characters.</p>
+          </div>
+        </div>
+        <label for="preview-caption">Caption</label>
+        <textarea id="preview-caption" rows="7" maxlength="2200" placeholder="What have you been working on?"></textarea>
+        <small id="preview-save" role="status">Your caption stays in this browser.</small>
+        <p id="preview-error" role="alert" hidden></p>
+      </section>
+
+      <section class="card preview-step preview-receipt" aria-labelledby="step-read">
+        <div class="preview-step-head">
+          <span class="step-number" aria-hidden="true">02</span>
+          <div>
+            <h2 id="step-read">Read it back</h2>
+            <p>This is the caption as a reader meets it.</p>
+          </div>
+        </div>
+        <div class="preview-paper">
+          <div class="preview-paper-head">
+            <span class="preview-avatar" aria-hidden="true">r.</span>
+            <strong>Your channel</strong>
+          </div>
+          <p id="preview-copy">Your words will appear here.</p>
+        </div>
+      </section>
+    </div>
+
+    <div class="preview-actions">
+      <span>Keep this caption when you join.</span>
+      <a href="/signup" class="button button-primary">Create an account to publish</a>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,51 +1,28 @@
 "use strict";
 
-function renderJourney() {
-  if (!$("#journey-next-step")) return;
-  const media = contentItems.find((item) => item.id === selectedContentId);
-  const accounts = accountList.filter((account) => selectedAccountIds.has(account.id));
-  const state = postJourneyState({ media, accounts, title: $("#youtube-publish-title").value, busy: publishing, results: [...activeInstagramPosts, ...youtubeUploadResults] });
-  $("#publish-view").dataset.state = state.state;
-  $("#publish-form").setAttribute("aria-busy", String(publishing));
-  $("#journey-next-step").textContent = state.next;
-  ["media", "details", "delivery"].forEach((name, i) => {
-    const node = $(`#journey-${name}`);
-    node.classList.toggle("complete", state.step > i + 1 || state.state === "complete");
-    if (state.step === i + 1) node.setAttribute("aria-current", "step");
-    else node.removeAttribute("aria-current");
-  });
-  $("#composer-start").hidden = Boolean(media) || state.step === 3;
-  $("#journey-media-copy").textContent = maxUploadBytes ? `JPEG or video · up to ${formatBytes(maxUploadBytes)} per file` : "Choose a saved file or upload something new.";
-  const draft = readLocalDraft();
-  $("#journey-launch-copy").textContent = draft ? `Your draft${draft.title ? ` “${draft.title}”` : ""} is waiting. Pick up where you left off.` : "Add your media. Make it yours. Send it out.";
-  const ready = activeInstagramPosts.some((post) => post.status === "ready");
-  const hasResults = activeInstagramPosts.length + youtubeUploadResults.length > 0;
-  $("#publish-submit").hidden = hasResults;
-  $("#publish-new-post").hidden = !hasResults;
-  $("#instagram-publish-ready").hidden = !ready;
-  $("#save-draft").hidden = state.state === "complete";
-  $("#instagram-publish-ready").classList.toggle("button-primary", ready);
-  $("#instagram-publish-ready").classList.toggle("button-secondary", !ready);
-  $("#publish-new-post").disabled = publishing || activeInstagramPosts.some((post) => ["processing", "ready", "publishing", "unknown"].includes(post.status));
-  $("#publish-new-post").classList.toggle("button-primary", state.state === "complete");
-  $("#publish-new-post").classList.toggle("button-ghost", state.state !== "complete");
-  $("#publish-new-post").textContent = state.state === "complete" ? "Create next post" : "Edit a copy";
-}
+/* Inline recovery, the channel sheet, session recovery, and connection status.
+
+   Message discipline: one inline recovery banner at a time. A toast is only for
+   a transient confirmation; persistent problems live next to the control that
+   caused them. */
 
 function showJourneyRecovery(message, run, container = $("#journey-recovery"), label = "Retry now") {
+  if (!container) return;
   container.replaceChildren();
-  const copy = document.createElement("span");
-  copy.textContent = message;
-  const retry = document.createElement("button");
-  retry.type = "button";
-  retry.className = "button button-secondary button-sm";
-  retry.textContent = label;
-  retry.addEventListener("click", async () => {
-    retry.disabled = true;
-    retry.setAttribute("aria-busy", "true");
-    try { await run(); } finally { retry.disabled = false; retry.removeAttribute("aria-busy"); }
-  });
-  container.append(copy, retry);
+  container.append(el("span", null, message));
+  if (run) {
+    const retry = el("button", "button button-secondary button-sm", label);
+    retry.type = "button";
+    retry.addEventListener("click", async () => {
+      retry.disabled = true;
+      retry.setAttribute("aria-busy", "true");
+      try { await run(); } finally {
+        retry.disabled = false;
+        retry.removeAttribute("aria-busy");
+      }
+    });
+    container.append(retry);
+  }
   container.hidden = false;
 }
 
@@ -53,24 +30,26 @@ const channelHome = $("#add-channel").parentElement;
 function openChannelSheet() {
   if (publishing) return;
   $("#channel-sheet-slot").append($("#add-channel"));
-  $("#channel-sheet").showModal();
+  $("#channel-sheet-error").hidden = true;
+  openDialog($("#channel-sheet"), $("#journey-add-channel"));
 }
 $("#channel-sheet").addEventListener("close", () => channelHome.append($("#add-channel")));
-$("#journey-add-channel").addEventListener("click", openChannelSheet);
-$("#journey-add-media").addEventListener("click", () => $("#open-media-picker").click());
+$("#journey-add-channel").addEventListener("click", () => {
+  if (!authenticated) { showUnlock(); return; }
+  openChannelSheet();
+});
 
-function adoptPreviewDraft() {
-  try {
-    const draft = localStorage.getItem("relay:preview-draft");
-    if (!draft || readLocalDraft()) return;
-    localStorage.setItem(localDraftKey(), draft);
-    localStorage.removeItem("relay:preview-draft");
-  } catch { /* A storage restriction must not stop the editor. */ }
-}
+/* The /try preview draft is handled by content.js (renderPreviewConflict):
+   it is adopted only when it carries no ownership claim and the current user
+   has no draft of their own, and otherwise the person chooses between the two
+   captions. It is never moved between users. */
+
+/* ── Session recovery ──────────────────────────────────────── */
 
 let sessionWindow = null;
 function showSessionRecovery() {
-  if (!$("#session-recovery-dialog").open) $("#session-recovery-dialog").showModal();
+  const dialog = $("#session-recovery-dialog");
+  if (!dialog.open) openDialog(dialog);
 }
 $("#session-resume").addEventListener("click", () => {
   sessionWindow = window.open("/login?resume=1", "relay-session", "popup=yes,width=520,height=720");
@@ -78,28 +57,39 @@ $("#session-resume").addEventListener("click", () => {
 });
 $("#session-same-tab").addEventListener("click", () => {
   saveLocalDraft({ announce: false });
-  try { sessionStorage.setItem("relay:return-page", activePage); } catch {}
+  try { sessionStorage.setItem("relay:return-page", activePage); } catch { /* ignore */ }
 });
 window.addEventListener("message", async (event) => {
   if (event.origin !== location.origin || event.source !== sessionWindow || !sessionWindow || event.data?.type !== "relay:session-restored") return;
   sessionWindow.close();
   sessionWindow = null;
   $("#session-recovery-dialog").close();
-  notice("Signed in. Continue with the post you were editing.");
+  notice("Signed in. Your post is still here.");
 });
+
+/* ── Connection status ─────────────────────────────────────── */
+
+function renderConnectionStatus() {
+  const status = $("#connection-status");
+  if (!status) return;
+  status.hidden = navigator.onLine;
+  status.textContent = "Offline";
+}
+
 window.addEventListener("offline", () => {
-  $("#connection-status").textContent = "Offline";
+  renderConnectionStatus();
   saveLocalDraft({ announce: false });
-  showJourneyRecovery("You're offline. Your text stays in this window; file selections are kept until you close it.", async () => {
-    try { await api("/session"); $("#journey-recovery").hidden = true; } catch { /* Keep recovery visible. */ }
+  showJourneyRecovery("You're offline. Your text stays in this window and your draft is saved in this browser.", async () => {
+    try { await api("/session"); $("#journey-recovery").hidden = true; renderConnectionStatus(); } catch { /* keep the banner */ }
   });
 });
 window.addEventListener("online", () => {
-  $("#connection-status").textContent = "Online";
+  renderConnectionStatus();
   $("#journey-recovery").hidden = true;
 });
+
 window.addEventListener("pagehide", () => {
-  if (activePage === "publish" && !publishing && $("#publish-view").dataset.state !== "complete") saveLocalDraft({ announce: false });
+  if (activePage === "publish" && !publishing) {
+    saveLocalDraft({ announce: false });
+  }
 });
-$("#publish-form").addEventListener("input", () => renderJourney());
-$(".composer-action-buttons").append($("#instagram-publish-ready"), $("#publish-new-post"));

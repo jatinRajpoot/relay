@@ -13,6 +13,8 @@ python -m venv .venv
 
 Open <http://localhost:8000> for the public landing page, then choose **Create your account** or **Log in**. Signup creates an account and its first workspace. Passwords must contain at least 12 characters and are stored as salted scrypt hashes. Browser sessions use random, server-revocable HttpOnly cookies lasting eight hours; only token hashes persist in SQLite. **Log out** revokes this browser session without disconnecting channels. Credentials and provider tokens are never placed in browser storage.
 
+On localhost, when no Instagram media bucket is configured, uploads are saved to `data/local-media` for preview in the Studio and Library. This local-only mode never publishes to YouTube or Instagram. Set `LOCAL_MEDIA_DIR` to choose another local folder; that option is accepted only with a localhost `BASE_URL`. Deployed environments continue to use `INSTAGRAM_MEDIA_BUCKET`.
+
 Use the workspace selector at the top of the dashboard to switch projects, or **+ New** to create another workspace (up to 50 per account). Each workspace owns its channels, media library, publishing jobs, analytics, and post history. The same Instagram or YouTube channel can be connected independently in different workspaces. Each browser tab pins requests to its loaded workspace so switching in another tab cannot redirect an in-progress upload. OAuth completion also saves connections to the workspace where authorization began.
 
 Existing connections, media, and publishing history migrate into a separate legacy workspace. New accounts never inherit legacy data. Existing service-key API clients and `POST /session` keep access to that legacy workspace only; the key cannot access user-owned workspaces. For the old operator dashboard, use `POST /session` with the service key through the API reference in the same browser, then open `/app`. Account ownership is private to one user; team invitations, email verification, and password recovery are not included.
@@ -153,12 +155,26 @@ The job atomically claims publication to prevent simultaneous requests from publ
 | POST | `/instagram/posts` | Create image/Reel container |
 | GET | `/instagram/posts/{id}` | Fetch and persist container status |
 | POST | `/instagram/posts/{id}/publish` | Publish ready container |
+| GET | `/publishing/attempts` | List this workspace's publishing receipts |
+| GET | `/publishing/attempts/{id}` | Read one receipt (never calls a provider) |
 
 Account, OAuth-start, upload, and publishing operations require a logged-in browser session or, for the legacy workspace, `X-API-Key`. Cookie-authenticated mutations require an `Origin` matching `BASE_URL`, protecting against cross-site requests; header-authenticated API clients keep their original behavior. The landing page, authentication pages, frontend assets, and `/session` status are public, but expose no service key, client secrets, or provider tokens. `POST /auth/signup` creates an account and first workspace; `POST /auth/login` logs in; `DELETE /session` revokes the current session. `GET /workspaces`, `POST /workspaces`, and `POST /workspaces/{id}/select` manage owned workspaces. Cookie-authenticated API requests can pin a workspace with `X-Workspace-ID`; ownership is always checked. Login and signup attempts are limited per email and client address over a 15-minute window. `POST /session` remains available for legacy service-key access. Open the page on the exact configured `BASE_URL` so its origin and callback cookies match.
 
 Relay supports **private accounts with multiple workspaces**. Anyone holding the service key can access the legacy workspace only. Bind locally by default. Public deployments need HTTPS and a reverse-proxy upload/body-size limit (especially for chunked requests). Use one worker: token-refresh locks are per process. Use a dedicated secret manager for deployed credentials. SQLite data is local and not a substitute for a backed-up production database.
 
-Provider errors are sanitized instead of returning raw responses that may contain tokens. HTTP 409 usually means consent must be renewed or the resource is not ready; HTTP 502 means a provider request failed. No real uploads or account authorizations run during tests.
+Provider errors are sanitized instead of returning raw responses that may contain tokens. HTTP 409 usually means consent must be renewed or the resource is not ready; HTTP 502 means a provider request failed; HTTP 503 with an `outcome` field means the durable database write failed (`not_applied` = safe to retry, `unknown` = verify before retrying). No real uploads or account authorizations run during tests.
+
+### Publishing receipts and manual recovery
+
+Every destination gets a durable receipt in `publishing_attempts` **before** any external call. `POST /instagram/posts`, `POST /instagram/posts/{id}/publish` and `POST /youtube/videos` accept an `Idempotency-Key` header (or the equivalent body/form field). The same key with the same payload returns the original result without re-sending; the same key with a different payload is a `409`. YouTube's fingerprint includes the SHA-256 of the uploaded bytes, so two different videos with identical name/size/type are two different requests.
+
+A receipt's status is one of `pending`, `submitted`, `processing`, `ready`, `published`, `failed`, `expired`, `unknown`. Only `failed` may be retried, and the receipt says exactly how: `retry_action` is `{kind, endpoint, key, retry_at}` where `kind` is `resend` (repeat `endpoint`, reusing the key named by `key`), `wait` (no resend until `retry_at`), `reconnect` (reconnect the channel first) or `new_attempt` (this destination can never be re-sent — start a new post). `unknown` and `published` never offer a resend. A status read (`GET /publishing/attempts`, `GET /instagram/posts/{id}`) only ages a stale claim in the database; it never calls a provider and never re-sends a publish.
+
+`next_action` is the same decision as one word for the interface: `retry` (resend now), `retry_later` (wait until `retry_at`), `reconnect`, `edit_copy` (start a new post), or for a non-failed receipt the control it needs (`wait`, `check`, `publish`, `verify`, `none`). It is derived from `retry_action`, so the two can never disagree; render `retry_action` and treat `next_action` as its label. `retry_action` is `null` for every receipt that is not `failed`.
+
+Two additive fields make a lost client state recoverable without guessing. `request_key` is the `Idempotency-Key` the client sent for the CREATE/UPLOAD that produced this receipt (`null` for keyless or legacy attempts), so a client that lost the response can match the exact receipt instead of guessing from timestamps — `created_at` alone can attach an unrelated newer or simultaneous post. `publish_key` is the confirmation key once a publish was claimed (`null` before that), so a failed confirmation can be retried with the exact original key after a reload even if the local draft is gone. Both are random values the client itself generated: they are correlation only, never authentication, and grant nothing. Every read remains authenticated and workspace-scoped, and neither the request fingerprint nor any token is exposed.
+
+`GET /accounts` reports `credentials_readable`. A channel whose stored token cannot be decrypted (a rotated `TOKEN_ENCRYPTION_KEY`, or a database restored under a different key) still appears connected, but every send fails with `409 "Stored credentials can't be read. Reconnect this account."` and its receipts carry `retry_action.kind = "reconnect"`. Reconnecting the channel clears those receipts so they can be retried normally.
 
 ## Cloud Run deployment
 
@@ -176,8 +192,33 @@ Each database transaction downloads the latest snapshot and uploads it only if c
 with a generation precondition preventing stale revisions from overwriting newer data.
 This is intended for a small deployment; keep concurrency and maximum
 instances at one. Storage/API errors fail the request rather than silently losing writes.
-Local runs continue to use local SQLite. Existing local connections are not migrated;
-connect accounts on the deployed site.
+A download is written to a staged file, integrity-checked, and only then atomically
+replaces the local cache; the cache is a diagnostic copy, never an authoritative
+substitute for the bucket. If an upload's response is lost, the service re-reads the
+object a bounded number of times: identical bytes at a later generation confirm the
+write, an unchanged generation proves it was not applied, and anything else is reported
+as `unknown` rather than guessed. Local runs continue to use local SQLite. Existing
+local connections are not migrated; connect accounts on the deployed site.
+
+**The cloud database is never created implicitly.** A service configured with
+`DATABASE_BUCKET` fails closed (startup raises, requests get a sanitized 503) when the
+snapshot is missing, empty, or corrupt. Deletion and first boot look identical from a
+Cloud Run instance, so the service must not guess. To create the first snapshot for a
+new deployment, run once with the service's credentials:
+
+```powershell
+$env:DATABASE_BUCKET="aitryout-485605-relay-data"
+python scripts/init_cloud_database.py
+```
+
+That upload uses `if_generation_match=0` (create-if-absent) and is a no-op if a snapshot
+already exists. There is deliberately **no runtime flag or environment variable** for
+this: `Store` has no initialization parameter, so a leftover setting cannot create or
+replace a live database. The script is the only creation path. **Operational
+tradeoff:** there is no automatic restore. If the object is deleted, the service stays
+down until the snapshot is restored from a backup or explicitly re-initialized (which
+starts from an empty database). Take bucket versioning or scheduled exports seriously
+for any real data; this design deliberately prefers a loud outage over a silent reset.
 
 The public `aitryout-485605-relay-media` bucket stores content uploaded from the
 frontend. Objects are readable by anyone with the URL so Meta can retrieve Instagram media. YouTube uploads read saved video files from this bucket. The

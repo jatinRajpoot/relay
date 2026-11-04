@@ -1,80 +1,155 @@
-/* ============================================================
-   Relay — studio UI
-   1. Tokens         5. Cards & content
-   2. Base           6. Composer
-   3. Rail & topbar  7. Channels / media / analytics / history
-   4. Page furniture 8. Dialogs, palette, toasts
-   ============================================================ */
+/* Relay design tokens — the single source for colour, type, spacing, shape, and motion.
 
-/* ── 1. Tokens ─────────────────────────────────────────────── */
+   Contrast floors (WCAG 2.1, measured against --paper / --raised):
+     --ink       14.5:1 / 15.7:1  body and headings
+     --ink-soft  10.3:1 / 11.1:1  secondary body
+     --muted      6.3:1 /  6.8:1  metadata, hints, labels (never below 4.5)
+     --faint      5.0:1 /  5.4:1  non-essential hints only
+   Status colours are dot + label, never a filled pill, and never colour-only.
+   One accent per theme: the single primary action, the active nav item, and focus. */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  --bg: #09090b;
-  --bg-soft: #09090b;
-  --surface: #111113;
-  --surface-2: #18181b;
-  --surface-3: #27272a;
-  --line: rgba(39, 39, 42, 0.8);
-  --line-strong: #3f3f46;
+  /* Surfaces — exactly three. No decorative gradients. */
+  --paper: #f3f0e7;
+  --raised: #fbf9f4;
+  --soft: #e9e6dc;
 
-  --text: #fafafa;
-  --text-2: #e4e4e7;
-  --muted: #a1a1aa;
-  --faint: #71717a;
+  /* Ink — four steps with the documented floors above. */
+  --ink: #16211c;
+  --ink-soft: #2f3b33;
+  --muted: #4f5a52;
+  --faint: #5f6a61;
+  --line: #dcdcd1;
+  --line-strong: #c3c6ba;
 
-  --accent: #c8f560;
-  --accent-ink: #09090b;
-  --accent-soft: rgba(200, 245, 96, 0.08);
-  --accent-line: rgba(200, 245, 96, 0.28);
+  /* Navigation rail */
+  --rail: #16211c;
+  --rail-raised: #223129;
+  --rail-text: #f3f0e7;
+  --rail-muted: #b3bcb2;
 
-  --success: #c8f560;
-  --success-soft: transparent;
-  --warn: #f0c05a;
-  --warn-soft: rgba(240, 192, 90, 0.13);
-  --danger: #ff8072;
-  --danger-soft: rgba(255, 128, 114, 0.12);
+  /* Accent — 4.8:1 on paper, 5.3:1 with --accent-on text. */
+  --accent: #b8402a;
+  --accent-hover: #9c3522;
+  /* Text placed on --accent. The dark theme's accent is a light coral, so it
+     takes dark ink instead. */
+  --accent-on: #fffaf6;
+  --accent-soft: #f7e4dc;
+  --accent-line: #e2a795;
+  /* Accent as text on --accent-soft: 5.7:1, so small labels stay legible. */
+  --accent-ink: #9c3522;
+  /* The single "live" dot in the rail and mobile nav. Never a fill. */
+  --lime: #cbe27b;
 
-  --radius: 14px;
-  --radius-sm: 9px;
-  --radius-lg: 20px;
+  /* Status — dot + label. */
+  --success: #2c6b4c;
+  --success-soft: #e0efe5;
+  --warning: #7d5216;
+  --warning-soft: #f7eeda;
+  --danger: #a5352c;
+  --danger-on: #fffaf6;
+  --danger-soft: #f7e4e1;
 
-  --shadow: none;
-  --shadow-pop: 0 24px 70px -24px rgba(0, 0, 0, 0.75);
+  /* Type — one scale, used instead of ad-hoc font shorthands. */
+  --sans: "Segoe UI Variable", "Aptos", "Segoe UI", system-ui, sans-serif;
+  --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-display: clamp(30px, 2.6vw, 40px);
 
-  --rail: 232px;
-  --topbar: 56px;
-  --maxw: 1180px;
+  /* Spacing — 4px base. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
 
-  --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+  /* Shape and depth — shadows are for overlays only. */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  --shadow: 0 14px 40px rgb(22 33 28 / 9%);
 
-  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  /* Motion — only to explain a state change. */
+  --ease-out: cubic-bezier(.2, .7, .3, 1);
+  --dur-fast: 120ms;
+  --dur: 180ms;
 }
 
-[data-theme="light"] {
+/* Dark theme. Kept in sync with the prefers-color-scheme fallback below. */
+html[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #09090b;
-  --bg-soft: #09090b;
-  --surface: #111113;
-  --surface-2: #18181b;
-  --surface-3: #27272a;
-  --line: rgba(39, 39, 42, 0.8);
-  --line-strong: #3f3f46;
-  --text: #fafafa;
-  --text-2: #e4e4e7;
-  --muted: #a1a1aa;
-  --faint: #71717a;
-  --accent: #c8f560;
-  --accent-ink: #09090b;
-  --accent-soft: rgba(200, 245, 96, 0.08);
-  --accent-line: rgba(200, 245, 96, 0.28);
-  --success: #c8f560;
-  --success-soft: transparent;
-  --warn: #f0c05a;
-  --warn-soft: rgba(240, 192, 90, 0.13);
-  --danger: #ff8072;
-  --danger-soft: rgba(255, 128, 114, 0.12);
-  --shadow: none;
-  --shadow-pop: 0 24px 70px -24px rgba(0, 0, 0, 0.75);
+  --paper: #141a16;
+  --raised: #1d251f;
+  --soft: #273129;
+  --ink: #f2efe5;
+  --ink-soft: #d9dfd4;
+  --muted: #a8b0a5;
+  --faint: #9aa396;
+  --line: #354036;
+  --line-strong: #4b574d;
+  --rail: #0f1511;
+  --rail-raised: #1b251e;
+  --rail-text: #f2efe5;
+  --rail-muted: #a9b4a8;
+  --accent: #f0896b;
+  --accent-hover: #ffa286;
+  /* Dark ink on the light coral accent: 7.1:1, versus 2.4:1 for near-white. */
+  --accent-on: #141a16;
+  --accent-soft: #3a2924;
+  --accent-line: #7a4b3d;
+  --accent-ink: #ffb49d;
+  --success: #93d0a8;
+  --success-soft: #22352a;
+  --warning: #e8c078;
+  --warning-soft: #382f1f;
+  --danger: #f09a8d;
+  --danger-on: #141a16;
+  --danger-soft: #3a2725;
+  --shadow: 0 16px 44px rgb(0 0 0 / 28%);
+}
+
+/* No stored choice: follow the operating system. theme-init.js writes the
+   resolved value, so this block only serves a page whose script did not run. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    color-scheme: dark;
+    --paper: #141a16;
+    --raised: #1d251f;
+    --soft: #273129;
+    --ink: #f2efe5;
+    --ink-soft: #d9dfd4;
+    --muted: #a8b0a5;
+    --faint: #9aa396;
+    --line: #354036;
+    --line-strong: #4b574d;
+    --rail: #0f1511;
+    --rail-raised: #1b251e;
+    --rail-text: #f2efe5;
+    --rail-muted: #a9b4a8;
+    --accent: #f0896b;
+    --accent-hover: #ffa286;
+    --accent-on: #141a16;
+    --accent-soft: #3a2924;
+    --accent-line: #7a4b3d;
+    --accent-ink: #ffb49d;
+    --success: #93d0a8;
+    --success-soft: #22352a;
+    --warning: #e8c078;
+    --warning-soft: #382f1f;
+    --danger: #f09a8d;
+    --danger-on: #141a16;
+    --danger-soft: #3a2725;
+    --shadow: 0 16px 44px rgb(0 0 0 / 28%);
+  }
 }

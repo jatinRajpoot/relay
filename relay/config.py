@@ -23,6 +23,7 @@ class Settings:
     instagram_api_version: str = "v25.0"
     max_upload_bytes: int = 2 * 1024**3
     instagram_media_bucket: str = ""
+    local_media_dir: Path | None = None
     youtube_redirect_uri: str = ""
     instagram_redirect_uri: str = ""
 
@@ -53,6 +54,15 @@ class Settings:
                 )
             ):
                 raise ValueError("Callback/base URLs must be HTTPS (HTTP allowed on localhost).")
+        if self.local_media_dir is not None and urlsplit(self.base_url).hostname not in {
+            "localhost", "127.0.0.1"
+        }:
+            raise ValueError("LOCAL_MEDIA_DIR is only available with a localhost BASE_URL.")
+
+    @property
+    def local_media_only(self) -> bool:
+        """Whether uploads are stored on this machine without provider publishing."""
+        return self.local_media_dir is not None and not self.instagram_media_bucket
 
     def redirect_uri(self, provider: str) -> str:
         override = getattr(self, f"{provider}_redirect_uri")
@@ -84,6 +94,20 @@ class Settings:
     def from_env(cls):
         load_dotenv(os.getenv("ENV_FILE", str(ROOT / ".env")))
         database_path = Path(os.getenv("DATABASE_PATH", "data/relay.sqlite3"))
+        base_url = os.getenv("BASE_URL", "http://localhost:8000").rstrip("/")
+        instagram_media_bucket = os.getenv("INSTAGRAM_MEDIA_BUCKET", "").strip()
+        local_media_dir = os.getenv("LOCAL_MEDIA_DIR", "").strip()
+        if (
+            not local_media_dir
+            and not instagram_media_bucket
+            and urlsplit(base_url).hostname in {"localhost", "127.0.0.1"}
+        ):
+            local_media_dir = "data/local-media"
+        if local_media_dir:
+            local_media_dir = Path(local_media_dir).expanduser()
+            if not local_media_dir.is_absolute():
+                local_media_dir = ROOT / local_media_dir
+            local_media_dir = local_media_dir.resolve()
         return cls(
             api_key=os.getenv("SERVICE_API_KEY", ""),
             encryption_key=os.getenv("TOKEN_ENCRYPTION_KEY", ""),
@@ -91,11 +115,12 @@ class Settings:
             youtube_client_secret=os.getenv("YOUTUBE_CLIENT_SECRET", ""),
             instagram_app_id=os.getenv("INSTAGRAM_APP_ID", ""),
             instagram_app_secret=os.getenv("INSTAGRAM_APP_SECRET", ""),
-            base_url=os.getenv("BASE_URL", "http://localhost:8000").rstrip("/"),
+            base_url=base_url,
             database_path=database_path if database_path.is_absolute() else ROOT / database_path,
             instagram_api_version=os.getenv("INSTAGRAM_API_VERSION", "v25.0"),
             max_upload_bytes=int(os.getenv("MAX_UPLOAD_BYTES", str(2 * 1024**3))),
-            instagram_media_bucket=os.getenv("INSTAGRAM_MEDIA_BUCKET", "").strip(),
+            instagram_media_bucket=instagram_media_bucket,
+            local_media_dir=local_media_dir,
             youtube_redirect_uri=os.getenv("YOUTUBE_REDIRECT_URI", ""),
             instagram_redirect_uri=os.getenv("INSTAGRAM_REDIRECT_URI", ""),
         )

@@ -1,0 +1,146 @@
+/* Channels surface. Owns connected-account rows and the add-a-channel block.
+   Hooks used by connect.js are preserved: .account-list, .account-row,
+   .account-identity, .account-status (status dot + label), .account-actions,
+   .platform-icon, .channel-connect-list, .channel-connect-row. */
+
+.page-view[data-page-view="connections"] > .card {
+  margin-bottom: var(--space-4);
+}
+
+.account-list {
+  display: grid;
+}
+
+.account-row {
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line);
+}
+
+/* Platform tiles carry identity, not status: a soft tint, never the accent. */
+.platform-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+  color: var(--ink-soft);
+}
+
+.platform-icon.instagram { background: #f6e2d9; color: #9c4128; }
+.platform-icon.youtube { background: #f4dfda; color: #a63a30; }
+
+html[data-theme="dark"] .platform-icon.instagram { background: #3a2a24; color: #f0a68d; }
+html[data-theme="dark"] .platform-icon.youtube { background: #3a2724; color: #f0a193; }
+
+.platform-icon svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+}
+
+.platform-icon.sm {
+  width: 36px;
+  height: 36px;
+}
+
+.account-identity {
+  min-width: 0;
+}
+
+.account-identity h3 {
+  overflow: hidden;
+  font-size: var(--text-base);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-identity p {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.account-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ── Add a channel ───────────────────────────────────────── */
+.channel-connect-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.channel-connect-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+.channel-connect-copy {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.channel-connect-copy strong {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.channel-connect-copy small {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* These two are the one place a state word is tinted inline; the label itself
+   still carries the meaning, so colour is never the only signal. */
+.channel-connect-copy small.connected {
+  color: var(--success);
+}
+
+.channel-connect-copy small.needs-setup {
+  color: var(--warning);
+}
+
+@media (max-width: 960px) {
+  .channel-connect-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 860px) {
+  .account-row {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: var(--space-2);
+  }
+
+  .account-status {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .account-actions {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+}

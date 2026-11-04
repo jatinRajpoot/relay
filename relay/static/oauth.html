@@ -1,31 +1,22 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f3f0e7">
   <title>Connect a channel · Relay</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/oauth.css">
+  <script src="/static/theme-init.js"></script>
   <script src="/static/oauth-complete.js" defer></script>
-  <style>
-    body.oauth-page { min-height: 100vh; display: grid; place-items: center; padding: 22px; background: radial-gradient(ellipse at 50% 35%, #dce4c366, transparent 48%), var(--paper); }
-    .oauth-card { width: min(100%, 410px); padding: 29px; border: 1px solid var(--line); border-radius: 16px; background: var(--raised); box-shadow: var(--shadow); }
-    .oauth-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 34px; }
-    .oauth-brand .brand-mark { width: 27px; height: 27px; }
-    .oauth-brand .brand-name { color: var(--ink); font-size: 20px; }
-    .oauth-card .eyebrow { color: var(--accent); }
-    .oauth-card h1 { margin: 12px 0 9px; color: var(--ink); font: 500 31px/1.12 var(--serif); letter-spacing: -.045em; }
-    .oauth-card p { color: var(--muted); font-size: 12px; line-height: 1.7; }
-    .oauth-hint { padding-top: 13px; border-top: 1px solid var(--line); font-size: 10px !important; }
-    .oauth-card .button { width: 100%; margin-top: 8px; }
-    @media(max-width:480px) { .oauth-card { padding: 23px; } }
-  </style>
 </head>
 <body class="oauth-page">
   <main class="oauth-card">
-    <div class="oauth-brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span class="brand-name">relay<span>.</span></span></div>
-    <div class="eyebrow">SECURE CHANNEL CONNECTION</div>
+    <div class="oauth-brand">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="brand-name">relay<span>.</span></span>
+    </div>
+    <p class="eyebrow">Secure channel connection</p>
     <h1 id="oauth-title">Opening sign-in…</h1>
     <p id="oauth-description">Keep this window open. Your provider’s sign-in page will appear here shortly.</p>
     <p class="oauth-hint" id="oauth-hint">If your provider reports an invalid redirect URI, close this window and follow the Setup guide in your workspace.</p>
