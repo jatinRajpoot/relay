@@ -96,7 +96,7 @@ class Settings:
         database_path = Path(os.getenv("DATABASE_PATH", "data/relay.sqlite3"))
         base_url = os.getenv("BASE_URL", "http://localhost:8000").rstrip("/")
         instagram_media_bucket = os.getenv("INSTAGRAM_MEDIA_BUCKET", "").strip()
-        local_media_dir = os.getenv("LOCAL_MEDIA_DIR", "").strip()
+        local_media_dir = os.getenv("LOCAL_MEDIA_DIR", "").strip() or None
         if (
             not local_media_dir
             and not instagram_media_bucket
