@@ -13,5 +13,7 @@ def settings(tmp_path):
         youtube_client_secret="test-google-secret",
         instagram_app_id="test-ig-client",
         instagram_app_secret="test-ig-secret",
+        pinterest_app_id="test-pin-client",
+        pinterest_app_secret="test-pin-secret",
         database_path=tmp_path / "tokens.sqlite3",
     )

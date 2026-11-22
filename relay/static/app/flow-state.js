@@ -64,6 +64,7 @@ function composerSections(accounts) {
   return {
     instagram: providers.has("instagram"),
     youtube: providers.has("youtube"),
+    pinterest: providers.has("pinterest"),
   };
 }
 
@@ -75,8 +76,11 @@ function composerBlockers({ media, accounts, instagramCaption, youtubeTitle, pub
   if (!media) blockers.push({ field: "media", message: "Choose a photo or video." });
   if (!accounts || !accounts.length) blockers.push({ field: "accounts", message: "Choose at least one channel." });
   if (media && accounts && accounts.length) {
-    const incompatible = accounts.filter((account) =>
-      account.provider === "youtube" ? !media.youtube_compatible : !media.instagram_compatible);
+    const incompatible = accounts.filter((account) => {
+      if (account.provider === "youtube") return !media.youtube_compatible;
+      if (account.provider === "pinterest") return !(media.content_type || "").startsWith("image/");
+      return !media.instagram_compatible;
+    });
     if (incompatible.length) {
       blockers.push({
         field: "media",

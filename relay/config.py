@@ -26,6 +26,9 @@ class Settings:
     local_media_dir: Path | None = None
     youtube_redirect_uri: str = ""
     instagram_redirect_uri: str = ""
+    pinterest_app_id: str = field(default="", repr=False)
+    pinterest_app_secret: str = field(default="", repr=False)
+    pinterest_redirect_uri: str = ""
 
     def __post_init__(self):
         if len(self.api_key) < 32:
@@ -38,7 +41,12 @@ class Settings:
             raise ValueError("INSTAGRAM_API_VERSION must look like v25.0.")
         if self.max_upload_bytes <= 0:
             raise ValueError("MAX_UPLOAD_BYTES must be positive.")
-        for url in [self.base_url, self.redirect_uri("youtube"), self.redirect_uri("instagram")]:
+        for url in [
+            self.base_url,
+            self.redirect_uri("youtube"),
+            self.redirect_uri("instagram"),
+            self.redirect_uri("pinterest"),
+        ]:
             parsed = urlsplit(url)
             if (
                 not parsed.hostname
@@ -71,6 +79,8 @@ class Settings:
     def credentials(self, provider: str) -> tuple[str, str]:
         if provider == "youtube":
             return self.youtube_client_id, self.youtube_client_secret
+        if provider == "pinterest":
+            return self.pinterest_app_id, self.pinterest_app_secret
         return self.instagram_app_id, self.instagram_app_secret
 
     def oauth_setup_issue(self, provider: str) -> str | None:
@@ -123,4 +133,7 @@ class Settings:
             local_media_dir=local_media_dir,
             youtube_redirect_uri=os.getenv("YOUTUBE_REDIRECT_URI", ""),
             instagram_redirect_uri=os.getenv("INSTAGRAM_REDIRECT_URI", ""),
+            pinterest_app_id=os.getenv("PINTEREST_APP_ID", ""),
+            pinterest_app_secret=os.getenv("PINTEREST_APP_SECRET", ""),
+            pinterest_redirect_uri=os.getenv("PINTEREST_REDIRECT_URI", ""),
         )

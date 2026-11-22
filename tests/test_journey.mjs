@@ -10,11 +10,13 @@ const video = { filename: "Launch.mp4", youtube_compatible: true, instagram_comp
 const photo = { filename: "Still.jpg", youtube_compatible: false, instagram_compatible: true };
 const instagram = { id: "ig", provider: "instagram", name: "Studio IG" };
 const youtube = { id: "yt", provider: "youtube", name: "Studio YT" };
+const pinterest = { id: "pin", provider: "pinterest", name: "Studio Pin" };
 
 test("platform sections follow the selected channels, not a master tab", () => {
-  assert.deepEqual({ ...flow.composerSections([]) }, { instagram: false, youtube: false });
-  assert.deepEqual({ ...flow.composerSections([instagram]) }, { instagram: true, youtube: false });
-  assert.deepEqual({ ...flow.composerSections([instagram, youtube]) }, { instagram: true, youtube: true });
+  assert.deepEqual({ ...flow.composerSections([]) }, { instagram: false, youtube: false, pinterest: false });
+  assert.deepEqual({ ...flow.composerSections([instagram]) }, { instagram: true, youtube: false, pinterest: false });
+  assert.deepEqual({ ...flow.composerSections([instagram, youtube]) }, { instagram: true, youtube: true, pinterest: false });
+  assert.deepEqual({ ...flow.composerSections([pinterest]) }, { instagram: false, youtube: false, pinterest: true });
 });
 
 test("blockers are ordered by what a person would fix first", () => {

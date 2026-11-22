@@ -132,7 +132,7 @@ def register_identity_routes(app, context: RouteContext):
                     "redirect_uri": settings.redirect_uri(provider),
                     "setup_issue": settings.oauth_setup_issue(provider),
                 }
-                for provider in ("instagram", "youtube")
+                for provider in ("instagram", "youtube", "pinterest")
             },
             "publishing": {
                 "instagram_media_configured": bool(settings.instagram_media_bucket),

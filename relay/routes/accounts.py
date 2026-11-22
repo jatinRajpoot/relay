@@ -59,6 +59,12 @@ def register_accounts_routes(app, context: RouteContext):
                             account["external_id"], token, period["start_date"], period["end_date"]
                         )
                     )
+                elif account["provider"] == "pinterest":
+                    item.update(
+                        await app.state.providers.pinterest_analytics(
+                            account["external_id"], token, period["start_date"], period["end_date"]
+                        )
+                    )
                 else:
                     posts = await app.state.providers.instagram_media(
                         account["external_id"], token, period["start_date"]

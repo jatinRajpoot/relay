@@ -23,6 +23,7 @@ from relay.routes import (
     register_identity_routes,
     register_instagram_routes,
     register_oauth_routes,
+    register_pinterest_routes,
     register_publishing_routes,
     register_service_routes,
     register_youtube_routes,
@@ -31,6 +32,7 @@ from relay.routes.context import CredentialsUnreadable, RouteContext
 from relay.schemas import (
     InstagramPost,
     LoginRequest,
+    PinterestPost,
     Provider,
     SignupRequest,
     UnlockRequest,
@@ -42,6 +44,7 @@ from relay.store.attempts import CONTAINER_FAILED_ERROR
 __all__ = [
     "InstagramPost",
     "LoginRequest",
+    "PinterestPost",
     "Provider",
     "SignupRequest",
     "UnlockRequest",
@@ -426,6 +429,7 @@ def create_app(settings: Settings | None = None, transport=None):
     register_content_routes(app, context)
     register_instagram_routes(app, context)
     register_youtube_routes(app, context)
+    register_pinterest_routes(app, context)
     register_publishing_routes(app, context)
 
     return app

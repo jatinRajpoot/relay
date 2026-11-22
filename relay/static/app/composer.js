@@ -34,7 +34,9 @@ function makeProfileAvatar(account, provider, size = "") {
 }
 
 function canUseMedia(item, provider) {
-  return provider === "instagram" ? item.instagram_compatible : item.youtube_compatible;
+  if (provider === "instagram") return item.instagram_compatible;
+  if (provider === "pinterest") return (item.content_type || "").startsWith("image/");
+  return item.youtube_compatible;
 }
 
 function mediaKind(item) {
@@ -298,23 +300,28 @@ function renderComposerDetails() {
   const sections = composerSections(selectedAccounts());
   $("#instagram-details").hidden = !sections.instagram;
   $("#youtube-details").hidden = !sections.youtube;
+  $("#pinterest-details").hidden = !sections.pinterest;
   $("#publish-caption").disabled = publishing;
   $("#youtube-publish-title").disabled = publishing;
   $("#youtube-publish-description").disabled = publishing;
   $("#youtube-publish-privacy").disabled = publishing;
   $("#youtube-made-for-kids").disabled = publishing;
+  if ($("#pinterest-publish-title")) $("#pinterest-publish-title").disabled = publishing;
+  if ($("#pinterest-publish-description")) $("#pinterest-publish-description").disabled = publishing;
+  if ($("#pinterest-board-select")) $("#pinterest-board-select").disabled = publishing;
+  if ($("#pinterest-publish-link")) $("#pinterest-publish-link").disabled = publishing;
   setText("#caption-count", String($("#publish-caption").value.length));
   const titleMissing = sections.youtube && !$("#youtube-publish-title").value.trim();
   $("#youtube-publish-title").setAttribute("aria-invalid", String(titleMissing));
   $("#youtube-title-hint").textContent = titleMissing ? "Required · add a title before publishing" : "Required · 1–100 characters";
   $("#youtube-title-hint").classList.toggle("is-error", titleMissing);
-  // The Instagram caption section only appears for an Instagram destination, so
-  // a YouTube-only post never implies it uses an Instagram caption.
-  const bothPlatforms = sections.instagram && sections.youtube;
+  const platformCount = [sections.instagram, sections.youtube, sections.pinterest].filter(Boolean).length;
+  const multiPlatforms = platformCount > 1;
   const switcher = $(".preview-switcher");
-  if (switcher) switcher.hidden = !bothPlatforms;
+  if (switcher) switcher.hidden = !multiPlatforms;
   document.querySelectorAll("[data-preview-platform]").forEach((tab) => {
-    tab.hidden = !bothPlatforms;
+    const p = tab.dataset.previewPlatform;
+    tab.hidden = !sections[p];
   });
 }
 
@@ -404,6 +411,12 @@ function renderComposerPreview() {
     title.textContent = youtubeTitle || "Your video title";
     title.hidden = false;
     copy.textContent = youtubeDescription || caption || "Your description will appear here.";
+  } else if (activePreviewPlatform === "pinterest") {
+    const pinTitle = $("#pinterest-publish-title") ? $("#pinterest-publish-title").value.trim() : "";
+    const pinDesc = $("#pinterest-publish-description") ? $("#pinterest-publish-description").value.trim() : "";
+    title.textContent = pinTitle || "Pin title";
+    title.hidden = false;
+    copy.textContent = pinDesc || caption || "Your Pin description will appear here.";
   } else {
     title.textContent = "";
     title.hidden = true;

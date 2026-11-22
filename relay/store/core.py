@@ -88,7 +88,7 @@ class StoreCore:
                 );
                 CREATE TABLE IF NOT EXISTS accounts (
                     id TEXT PRIMARY KEY,
-                    provider TEXT NOT NULL CHECK(provider IN ('youtube', 'instagram')),
+                    provider TEXT NOT NULL CHECK(provider IN ('youtube', 'instagram', 'pinterest')),
                     external_id TEXT NOT NULL,
                     name TEXT NOT NULL,
                     access_token TEXT NOT NULL,
@@ -113,7 +113,7 @@ class StoreCore:
                 );
                 CREATE TABLE IF NOT EXISTS post_history (
                     id TEXT PRIMARY KEY,
-                    provider TEXT NOT NULL CHECK(provider IN ('youtube', 'instagram')),
+                    provider TEXT NOT NULL CHECK(provider IN ('youtube', 'instagram', 'pinterest')),
                     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
                     platform_post_id TEXT NOT NULL,
                     title TEXT,
@@ -139,7 +139,7 @@ class StoreCore:
                     id TEXT PRIMARY KEY,
                     workspace_id TEXT NOT NULL,
                     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-                    provider TEXT NOT NULL CHECK(provider IN ('youtube', 'instagram')),
+                    provider TEXT NOT NULL CHECK(provider IN ('youtube', 'instagram', 'pinterest')),
                     status TEXT NOT NULL,
                     post_id TEXT REFERENCES instagram_posts(id) ON DELETE CASCADE,
                     provider_ref TEXT,
@@ -175,6 +175,7 @@ class StoreCore:
                 db.execute("ALTER TABLE accounts ADD COLUMN avatar_url TEXT")
             self._migrate_workspaces(db)
             self._migrate_post_history_key(db)
+            self._migrate_provider_checks(db)
             post_columns = {row[1] for row in db.execute("PRAGMA table_info(instagram_posts)")}
             for column, declaration in (
                 ("media_type", "TEXT"),
@@ -385,6 +386,103 @@ class StoreCore:
                 db.execute("ALTER TABLE post_history_scoped RENAME TO post_history")
         finally:
             db.execute("PRAGMA foreign_keys=ON")
+
+    @staticmethod
+    def _migrate_provider_checks(db):
+        """Ensure accounts, post_history, and publishing_attempts permit 'pinterest'."""
+        for table, new_sql in [
+            (
+                "accounts",
+                """CREATE TABLE accounts_migrated (
+                    id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL CHECK(provider IN ('youtube', 'instagram', 'pinterest')),
+                    external_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    access_token TEXT NOT NULL,
+                    refresh_token TEXT,
+                    expires_at INTEGER NOT NULL,
+                    scopes TEXT NOT NULL,
+                    token_updated_at INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    workspace_id TEXT NOT NULL DEFAULT 'legacy',
+                    avatar_url TEXT,
+                    UNIQUE(workspace_id, provider, external_id)
+                )""",
+            ),
+            (
+                "post_history",
+                """CREATE TABLE post_history_migrated (
+                    id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL CHECK(provider IN ('youtube', 'instagram', 'pinterest')),
+                    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                    platform_post_id TEXT NOT NULL,
+                    title TEXT,
+                    caption TEXT NOT NULL DEFAULT '',
+                    media_name TEXT,
+                    media_type TEXT,
+                    media_url TEXT,
+                    post_url TEXT,
+                    visibility TEXT,
+                    published_at INTEGER NOT NULL,
+                    UNIQUE(provider, account_id, platform_post_id)
+                )""",
+            ),
+            (
+                "publishing_attempts",
+                """CREATE TABLE publishing_attempts_migrated (
+                    id TEXT PRIMARY KEY,
+                    workspace_id TEXT NOT NULL,
+                    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+                    provider TEXT NOT NULL CHECK(provider IN ('youtube', 'instagram', 'pinterest')),
+                    status TEXT NOT NULL,
+                    post_id TEXT REFERENCES instagram_posts(id) ON DELETE CASCADE,
+                    provider_ref TEXT,
+                    provider_url TEXT,
+                    media_name TEXT,
+                    media_type TEXT,
+                    media_url TEXT,
+                    title TEXT,
+                    caption TEXT NOT NULL DEFAULT '',
+                    privacy_status TEXT,
+                    idempotency_key TEXT,
+                    request_fingerprint TEXT,
+                    publish_idempotency_key TEXT,
+                    publish_fingerprint TEXT,
+                    error TEXT,
+                    retry_kind TEXT,
+                    retry_at INTEGER,
+                    failure_stage TEXT,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    claimed_at INTEGER
+                )""",
+            ),
+        ]:
+            row = db.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
+            ).fetchone()
+            if row and row[0] and "pinterest" not in row[0]:
+                db.commit()
+                db.execute("PRAGMA foreign_keys=OFF")
+                try:
+                    with db:
+                        db.execute("BEGIN IMMEDIATE")
+                        db.execute(new_sql)
+                        existing = [
+                            c[1] for c in db.execute(f"PRAGMA table_info({table})").fetchall()
+                        ]
+                        target_cols = [
+                            c[1]
+                            for c in db.execute(f"PRAGMA table_info({table}_migrated)").fetchall()
+                        ]
+                        copied = ", ".join(c for c in target_cols if c in existing)
+                        db.execute(
+                            f"INSERT INTO {table}_migrated({copied}) SELECT {copied} FROM {table}"
+                        )
+                        db.execute(f"DROP TABLE {table}")
+                        db.execute(f"ALTER TABLE {table}_migrated RENAME TO {table}")
+                finally:
+                    db.execute("PRAGMA foreign_keys=ON")
 
     # ── Cloud snapshot I/O ───────────────────────────────────────────────
     @classmethod

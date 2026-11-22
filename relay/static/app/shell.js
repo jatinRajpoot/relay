@@ -2,7 +2,7 @@
 
 // Feature scripts are loaded in order by index.html and share this page state.
 const $ = (selector) => document.querySelector(selector);
-const names = { instagram: "Instagram", youtube: "YouTube" };
+const names = { instagram: "Instagram", youtube: "YouTube", pinterest: "Pinterest" };
 let authenticated = false;
 let accountList = [];
 let contentItems = [];
@@ -15,6 +15,7 @@ let localMediaStorage = false;
 let maxUploadBytes = 0;
 let activeInstagramPosts = [];
 let youtubeUploadResults = [];
+let pinterestPublishResults = [];
 let instagramStatusTimer = null;
 let instagramStatusCheckRunning = false;
 let analyticsData = null;
@@ -33,8 +34,8 @@ let activePreviewPlatform = "instagram";
 let historyFilter = "all";
 let publishing = false;
 let activePage = "overview";
-const providerConfigured = { instagram: true, youtube: true };
-const providerIssues = { instagram: null, youtube: null };
+const providerConfigured = { instagram: true, youtube: true, pinterest: true };
+const providerIssues = { instagram: null, youtube: null, pinterest: null };
 
 /* `activeSubmission`, `recoveredAttempts`, and `activityAttempts` live in
    publishing.js and history.js next to the code that owns them. */

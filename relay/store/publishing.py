@@ -245,6 +245,42 @@ class PublishingStore:
                 ),
             )
 
+    def save_pinterest_history(
+        self,
+        account_id,
+        pin_id,
+        title,
+        description,
+        media_name,
+        media_type,
+        media_url,
+        post_url,
+        visibility="public",
+    ):
+        with self.connection() as db:
+            db.execute(
+                """
+                INSERT INTO post_history(
+                    id, provider, account_id, platform_post_id, title, caption,
+                    media_name, media_type, media_url, post_url, visibility, published_at
+                ) VALUES (?, 'pinterest', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(provider, account_id, platform_post_id) DO NOTHING
+                """,
+                (
+                    f"pinterest-{account_id}-{pin_id}",
+                    account_id,
+                    pin_id,
+                    title,
+                    description,
+                    media_name,
+                    media_type,
+                    media_url,
+                    post_url,
+                    visibility,
+                    int(time.time()),
+                ),
+            )
+
     def list_post_history(self, limit=200):
         with self.connection() as db:
             return [

@@ -42,7 +42,11 @@ export class OAuthPopup {
 
   navigate(authorizationUrl) {
     const url = new URL(authorizationUrl);
-    const allowedHosts = { instagram: "www.instagram.com", youtube: "accounts.google.com" };
+    const allowedHosts = {
+      instagram: "www.instagram.com",
+      youtube: "accounts.google.com",
+      pinterest: "www.pinterest.com",
+    };
     if (url.protocol !== "https:" || url.hostname !== allowedHosts[this.provider] || url.username || url.password) {
       throw new Error("An unexpected sign-in address was returned. Please try again.");
     }
