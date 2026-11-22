@@ -91,3 +91,12 @@ test("only the provider's HTTPS authorization host can receive popup navigation"
   }
   flow.close();
 });
+
+test("navigates pinterest popup to www.pinterest.com securely", () => {
+  const {host, events} = browser();
+  const flow = new OAuthPopup(host, () => {}, () => {});
+  flow.open("pinterest");
+  flow.navigate("https://www.pinterest.com/oauth/?client_id=123");
+  assert.equal(events.at(-2)[0], "navigate");
+  flow.close();
+});

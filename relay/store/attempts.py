@@ -59,7 +59,7 @@ PENDING_SECONDS = 300
 # How long a claim may stay unconfirmed before it is treated as uncertain.
 # Instagram publish calls are short; a YouTube upload may legitimately stream
 # for up to the provider's 600 s timeout, so it gets a wider bound.
-STALE_SECONDS = {"instagram": 300, "youtube": 900}
+STALE_SECONDS = {"instagram": 300, "youtube": 900, "pinterest": 300}
 
 # Why a definitively-failed receipt cannot be retried yet. ``none`` means the
 # user may retry immediately; ``delay`` means the provider asked us to wait;

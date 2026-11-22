@@ -95,6 +95,7 @@ class ProviderCore:
         self.settings = settings
         self.client = client
         self.instagram_url = f"https://graph.instagram.com/{settings.instagram_api_version}"
+        self.pinterest_url = "https://api.pinterest.com/v5"
 
     async def request(self, method, url, **kwargs):
         try:

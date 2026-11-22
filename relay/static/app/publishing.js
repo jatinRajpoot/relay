@@ -130,7 +130,8 @@ function resultRow({
 /* ── The submission on screen ──────────────────────────────── */
 
 function currentResults() {
-  return [...activeInstagramPosts, ...youtubeUploadResults];
+  const pinResults = typeof pinterestPublishResults !== "undefined" ? pinterestPublishResults : [];
+  return [...activeInstagramPosts, ...youtubeUploadResults, ...pinResults];
 }
 
 /* The controls a finished destination may offer.
@@ -790,6 +791,9 @@ function resetDeliveryState() {
   stopStatusPolling();
   activeInstagramPosts = [];
   youtubeUploadResults = [];
+  if (typeof pinterestPublishResults !== "undefined") {
+    pinterestPublishResults = [];
+  }
   publishing = false;
 }
 
@@ -800,6 +804,10 @@ function draftSnapshot() {
     description: $("#youtube-publish-description").value,
     visibility: $("#youtube-publish-privacy").value,
     madeForKids: $("#youtube-made-for-kids").checked,
+    pinterestTitle: $("#pinterest-publish-title") ? $("#pinterest-publish-title").value : "",
+    pinterestDescription: $("#pinterest-publish-description") ? $("#pinterest-publish-description").value : "",
+    pinterestBoardId: $("#pinterest-board-select") ? $("#pinterest-board-select").value : "",
+    pinterestLink: $("#pinterest-publish-link") ? $("#pinterest-publish-link").value : "",
     selectedContentId,
     selectedAccountIds: [...selectedAccountIds],
     submission: activeSubmission ? cloneSubmission(activeSubmission) : null,
@@ -815,6 +823,17 @@ function instagramPayload(account, item, caption) {
     media_type: item.content_type === "image/jpeg" ? "IMAGE" : "REELS",
     media_url: item.media_url,
     caption,
+  };
+}
+
+function pinterestPayload(account, item, fields) {
+  return {
+    account_id: account.id,
+    board_id: fields.pinterestBoardId || null,
+    title: fields.pinterestTitle || "",
+    description: fields.pinterestDescription || fields.caption || "",
+    link: fields.pinterestLink || null,
+    media_url: item.media_url,
   };
 }
 
@@ -838,9 +857,14 @@ function youtubePayload(account, item, fields) {
 function planSubmission({ accounts, item, fields }) {
   const plans = [];
   for (const account of accounts) {
-    const payload = account.provider === "youtube"
-      ? youtubePayload(account, item, fields)
-      : instagramPayload(account, item, fields.caption);
+    let payload;
+    if (account.provider === "youtube") {
+      payload = youtubePayload(account, item, fields);
+    } else if (account.provider === "pinterest") {
+      payload = pinterestPayload(account, item, fields);
+    } else {
+      payload = instagramPayload(account, item, fields.caption);
+    }
     const plan = planDestination(activeSubmission, {
       accountId: account.id,
       provider: account.provider,
@@ -872,6 +896,10 @@ async function publishPost() {
     description: $("#youtube-publish-description").value || $("#publish-caption").value,
     privacy: $("#youtube-publish-privacy").value,
     madeForKids: $("#youtube-made-for-kids").checked,
+    pinterestTitle: $("#pinterest-publish-title") ? $("#pinterest-publish-title").value.trim() : "",
+    pinterestDescription: ($("#pinterest-publish-description") && $("#pinterest-publish-description").value.trim()) || $("#publish-caption").value,
+    pinterestBoardId: $("#pinterest-board-select") ? $("#pinterest-board-select").value : "",
+    pinterestLink: $("#pinterest-publish-link") ? $("#pinterest-publish-link").value.trim() : "",
   };
 
   // A new submission is created only when there is no persisted one, or when
@@ -1066,6 +1094,87 @@ async function publishPost() {
     renderDeliverySection();
   }
 
+  // Pinterest: one pin per account.
+  if (typeof pinterestPublishResults !== "undefined") {
+    for (const { account, payload, plan } of sendable.filter(({ account }) => account.provider === "pinterest")) {
+      let entry = pinterestPublishResults.find((result) => result.account.id === account.id);
+      if (!entry) {
+        entry = { account, url: null, attemptId: null, status: "submitted", error: null, updatedAt: Date.now() };
+        pinterestPublishResults.push(entry);
+      }
+      entry.status = "submitted";
+      entry.attemptId = null;
+      entry.error = null;
+      activeSubmission = recordDestination(activeSubmission, {
+        accountId: account.id,
+        provider: "pinterest",
+        payload,
+        state: "sent",
+      });
+      saveLocalDraft({ announce: false });
+      renderDeliverySection();
+      try {
+        const pinBody = {
+          account_id: account.id,
+          board_id: payload.board_id || undefined,
+          title: payload.title || undefined,
+          description: payload.description || undefined,
+          link: payload.link || undefined,
+          media_url: payload.media_url,
+          idempotency_key: plan.key,
+        };
+        const published = await api("/pinterest/pins", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": plan.key,
+          },
+          body: JSON.stringify(pinBody),
+        });
+        if (published && published.url) {
+          entry.url = published.url;
+          entry.status = "published";
+          entry.updatedAt = Date.now();
+          activeSubmission = recordDestination(activeSubmission, {
+            accountId: account.id,
+            provider: "pinterest",
+            payload,
+            state: "published",
+            attemptId: published.attempt?.id || null,
+          });
+        } else {
+          entry.status = "unknown";
+          entry.attemptId = published?.attempt?.id || null;
+          entry.updatedAt = Date.now();
+          entry.error = "Relay is still resolving this pin. Check Pinterest before doing anything else.";
+          activeSubmission = recordDestination(activeSubmission, {
+            accountId: account.id,
+            provider: "pinterest",
+            payload,
+            state: "unknown",
+            attemptId: published?.attempt?.id || null,
+          });
+        }
+      } catch (error) {
+        entry.updatedAt = Date.now();
+        entry.error = error.message;
+        const state = sendFailureState(error);
+        entry.status = state.state;
+        entry.resend = state.resend;
+        activeSubmission = recordDestination(activeSubmission, {
+          accountId: account.id,
+          provider: "pinterest",
+          payload,
+          state: state.state,
+          resend: state.resend,
+        });
+        await adoptReceiptFor(account.id);
+      }
+      saveLocalDraft({ announce: false });
+      renderDeliverySection();
+    }
+  }
+
   publishing = false;
   saveLocalDraft({ announce: false });
   renderComposer();
@@ -1080,7 +1189,12 @@ async function publishPost() {
     receiptsSyncing = false;
     renderDeliverySection();
   }
-  if (youtubeUploadResults.some((result) => result.status === "published")) await loadPostHistory({ silent: true });
+  if (
+    youtubeUploadResults.some((result) => result.status === "published") ||
+    (typeof pinterestPublishResults !== "undefined" && pinterestPublishResults.some((result) => result.status === "published"))
+  ) {
+    await loadPostHistory({ silent: true });
+  }
   if (currentResults().some((result) => ["processing", "submitted", "unknown"].includes(result.status))) {
     scheduleStatusPolling();
   }

@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
-Provider = Literal["youtube", "instagram"]
+Provider = Literal["youtube", "instagram", "pinterest"]
 
 
 IDEMPOTENCY_PATTERN = r"^[A-Za-z0-9._:-]{8,128}$"
@@ -39,6 +39,37 @@ class InstagramPost(BaseModel):
     @classmethod
     def valid_idempotency_key(cls, value):
         return normalize_idempotency_key(value)
+
+
+class PinterestPost(BaseModel):
+    account_id: str = Field(min_length=1, max_length=64)
+    board_id: str | None = Field(default=None, max_length=64)
+    board_name: str | None = Field(default=None, max_length=100)
+    title: str = Field(default="", max_length=100)
+    description: str = Field(default="", max_length=800)
+    link: HttpUrl | None = None
+    media_url: HttpUrl
+    alt_text: str | None = Field(default=None, max_length=500)
+    idempotency_key: str | None = Field(default=None, max_length=128)
+
+    @field_validator("media_url")
+    @classmethod
+    def public_https_url(cls, value):
+        if value.scheme != "https" or value.username or value.password or value.fragment:
+            raise ValueError("Use a publicly accessible HTTPS media URL without credentials.")
+        return value
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def valid_idempotency_key(cls, value):
+        return normalize_idempotency_key(value)
+
+
+class CreateBoardRequest(BaseModel):
+    account_id: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=100)
+    description: str = Field(default="", max_length=500)
+    privacy: Literal["PUBLIC", "SECRET", "PROTECTED"] = "PUBLIC"
 
 
 class PublishRequest(BaseModel):

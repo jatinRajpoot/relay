@@ -9,6 +9,7 @@ YOUTUBE_SCOPES = (
     "https://www.googleapis.com/auth/youtube.readonly"
 )
 INSTAGRAM_SCOPES = "instagram_business_basic,instagram_business_content_publish"
+PINTEREST_SCOPES = "boards:read,boards:write,pins:read,pins:write,user_accounts:read"
 
 
 class OAuthProvider:
@@ -24,6 +25,15 @@ class OAuthProvider:
             )
             channels = data.get("items") or []
             return self.youtube_avatar(channels[0].get("snippet")) if channels else None
+        if provider == "pinterest":
+            data = self.payload(
+                await self.request(
+                    "GET",
+                    f"{self.pinterest_url}/user_account",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            )
+            return data.get("profile_image")
         data = self.payload(
             await self.request(
                 "GET",
@@ -55,6 +65,9 @@ class OAuthProvider:
                 code_challenge_method="S256",
             )
             endpoint = "https://accounts.google.com/o/oauth2/v2/auth"
+        elif provider == "pinterest":
+            params.update(scope=PINTEREST_SCOPES)
+            endpoint = "https://www.pinterest.com/oauth/"
         else:
             params.update(scope=INSTAGRAM_SCOPES, enable_fb_login="0", force_authentication="1")
             endpoint = "https://www.instagram.com/oauth/authorize"
@@ -105,6 +118,47 @@ class OAuthProvider:
                 snippet.get("title", "YouTube"),
                 granted,
                 avatar_url,
+            )
+
+        if provider == "pinterest":
+            basic_auth = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+            tokens = self.tokens(
+                self.payload(
+                    await self.request(
+                        "POST",
+                        f"{self.pinterest_url}/oauth/token",
+                        data={
+                            "grant_type": "authorization_code",
+                            "code": code,
+                            "redirect_uri": self.settings.redirect_uri("pinterest"),
+                        },
+                        headers={
+                            "Authorization": f"Basic {basic_auth}",
+                            "Content-Type": "application/x-www-form-urlencoded",
+                        },
+                    )
+                )
+            )
+            profile = self.payload(
+                await self.request(
+                    "GET",
+                    f"{self.pinterest_url}/user_account",
+                    headers={"Authorization": f"Bearer {tokens['access_token']}"},
+                )
+            )
+            account_id = (
+                self.required_id(profile, "id")
+                if "id" in profile
+                else self.required_id(profile, "username")
+            )
+            name = profile.get("username") or profile.get("business_name") or "Pinterest"
+            granted = tokens.get("scope") or PINTEREST_SCOPES
+            return (
+                tokens,
+                account_id,
+                name,
+                granted,
+                profile.get("profile_image"),
             )
 
         # Meta documents multipart form data for the authorization-code exchange.
@@ -173,6 +227,20 @@ class OAuthProvider:
                     "client_id": client_id,
                     "client_secret": client_secret,
                     "refresh_token": refresh_token,
+                },
+            )
+        elif provider == "pinterest":
+            if not refresh_token:
+                raise HTTPException(409, "No refresh token stored. Reconnect Pinterest.")
+            client_id, client_secret = self.settings.credentials(provider)
+            basic_auth = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+            response = await self.request(
+                "POST",
+                f"{self.pinterest_url}/oauth/token",
+                data={"grant_type": "refresh_token", "refresh_token": refresh_token},
+                headers={
+                    "Authorization": f"Basic {basic_auth}",
+                    "Content-Type": "application/x-www-form-urlencoded",
                 },
             )
         else:

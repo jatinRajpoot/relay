@@ -35,9 +35,19 @@
 
 .platform-icon.instagram { background: #f6e2d9; color: #9c4128; }
 .platform-icon.youtube { background: #f4dfda; color: #a63a30; }
+.platform-icon.pinterest { background: #fde8ea; color: #bd081c; }
 
 html[data-theme="dark"] .platform-icon.instagram { background: #3a2a24; color: #f0a68d; }
 html[data-theme="dark"] .platform-icon.youtube { background: #3a2724; color: #f0a193; }
+html[data-theme="dark"] .platform-icon.pinterest { background: #3b2225; color: #ff5a6b; }
+
+.account-platform.instagram { background: #f6e2d9; color: #9c4128; }
+.account-platform.youtube { background: #f4dfda; color: #a63a30; }
+.account-platform.pinterest { background: #fde8ea; color: #bd081c; }
+
+html[data-theme="dark"] .account-platform.instagram { background: #3a2a24; color: #f0a68d; }
+html[data-theme="dark"] .account-platform.youtube { background: #3a2724; color: #f0a193; }
+html[data-theme="dark"] .account-platform.pinterest { background: #3b2225; color: #ff5a6b; }
 
 .platform-icon svg {
   width: 19px;
